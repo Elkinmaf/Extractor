@@ -1,0 +1,39 @@
+2025-03-14 22:57:46 - INFO - sap_browser - Iniciando navegador con perfil guardado...
+2025-03-14 22:57:50 - INFO - sap_browser - Navegador Chrome iniciado correctamente
+2025-03-14 22:57:50 - INFO - sap_browser - Intentando navegar a: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 22:58:09 - INFO - sap_browser - URL actual después de navegación: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZJRb9sgEMe%2FikWfMRhjO0ZOpGxRtUjtFjXZHvZGAKdINrgcXrpvP9fplL6kr%2FA73e9%2Fd816jM%2FuybyMBmKyBjAhWu%2B%2Begdjb8LehD9WmZ9PD0v0HOMAghCplB9dhBTkkCrfE5B9x4jVw%2FQFKNkFH73y3RfrtHWnJRqDE16CBeFkb0BEJfbrxwfBUiqOFwjEt8Nhh3c%2F9geUbCYV6%2BSbx7Vr50%2FWpb1VwYNvo3eddWZuz1lblVWpcMuLAnOWK7xgbYm1YrquqzqTbXVxRMl2s0R7WXF95JxjWi8yzOWiwseylFi3xvCClkeeVRMKMJqtgyhdXCJGWYFpjrPiQHNRLARlKa%2F5b5T8MgFm0ykOSl77zsHnkYf3%2BbzDwgH7vED%2B38q1gl8GM83lfD6n5zz14UQYpRmhnEyQceruSuc3aEpo%2FUZrsKc7tGomEzHHDqtby27IB6j5PrluNzvfWfU3ufehl%2FF2lCzN5hercTujYnQwGGVbazQiq4Z8vMXVPw%3D%3D&RelayState=__HOST-arc2d29b7&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=QlDPdmeH%2F3pbaRxM%2FCrlHPC85je1NiNnChtn7UNumFq7p6KD5v%2Bajzl3vsM3qEFPiYcWrE3MDFyKKILOO%2Fb5WqeApB8mHpHsntsXH%2BaeFF5QaL5teFONeRplztreva%2B8CTamUU71HXkT4yPuO8OgNAO0QzljTlkrJdSDRzRbJFrqR5imlSP3AJ3LBQTCDuY%2F0n%2B0I10DZq2FZXrApzEzg%2Fe9tjGV3%2Fo564RF9oRn8HC86kLgLZFoLKJ5fB3dbwSKUqsSmy0akcKnvvWFVHTub9piaXEBldXfISgLbRwNOUvoirtjWgFtzaP7QyPIP75Ai%2Fu1br2QfOQLGSvd1dVrSg%3D%3D
+2025-03-14 22:58:09 - WARNING - sap_browser - Detectada redirección no deseada, intentando navegación por JavaScript
+2025-03-14 22:58:16 - INFO - sap_browser - URL después de navegación por JavaScript: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZLNbtswEIRfRWDOFH8kWSYhG3BrFDWQtkbs9tAbTVEOAYlUuVTdvn0ZOYVzca7kN9iZ2W02U3x2T%2BbXZCBmGwATovXuo3cwDSYcTPhttfn%2B9LhCzzGOIAlRWvvJRchBjbn2AwE19JzYdkxfgLJ98NFr33%2BwrrXuvEJTcNIrsCCdGgzIqOVh8%2BVR8pzK0xUC%2Bfl43OP9t8MRZdtkxTr14uM2tfdn6%2FLB6uDBd9G73jozjy95Vy%2FqhcZdWVW45IXGS94tcKt5K0QtmOrqq0eU7bYrdGClqUVdtLjj3CSBOWGlSorFaSmUEKxqxSKhAJPZOYjKxRXilFeYFphVR1rIaikZy2vGf6LshwkwO01xUPZn6B28H3l87ecVlg74%2BwL1fys3RXktJvVyuVzyS5H7cCacUkZoSRJknH640cUdmhIqXugW7PkBrZvkRM6xw%2FreshvyBmq%2BJq%2B77d73Vv%2FNPvkwqHg%2FCsvZ%2FGJT8TMqJwej0bazpkVk3ZC3t7j%2BBw%3D%3D&RelayState=__HOST-arcb550b1&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=Zb6FJLvszipnfr8oibrmNN%2FdiZ6ifdPPUSuRy86owxUbOkt422zDMp0fUUQSMuOszhV0RG6lkJ9mpfj39KAUOWWoJRQBSW8AW4FLF2Gmpe72vw3t%2B%2BqSkRBt5VYsP1ILaWZ2gY9xHp%2Bl84nFavlJYOL85Eyeu2eac0eAhUfpQBGMs4yjjqJn2Sip5e4SGmPdHKgBzBKlDGpFzYUb1UETCsOD8sqQJbPsPoW3imRo0T9aSIxH9Vx3AXbbU%2BUd5upijy0tNduIgXmZfvZ2nzEBd8Is5lU4rDM5fAdLpFUV9b%2Fpab7guikWXNO9CTAVSlnRoB%2BLd4FvV%2FT2Ig3TIGycBA%3D%3D
+2025-03-14 22:58:16 - WARNING - sap_browser - Redirección persistente, intentando método forzado
+2025-03-14 22:58:21 - INFO - sap_browser - URL final después de todos los intentos: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZLNbtswEIRfRWDOFH8kWSYhG3BrFDWQtkbs9tAbTVEOAYlUuVTdvn0ZOYVzca7kN9iZ2W02U3x2T%2BbXZCBmGwATovXuo3cwDSYcTPhttfn%2B9LhCzzGOIAlRWvvJRchBjbn2AwE19JzYdkxfgLJ98NFr33%2BwrrXuvEJTcNIrsCCdGgzIqOVh8%2BVR8pzK0xUC%2Bfl43OP9t8MRZdtkxTr14uM2tfdn6%2FLB6uDBd9G73jozjy95Vy%2FqhcZdWVW45IXGS94tcKt5K0QtmOrqq0eU7bYrdGClqUVdtLjj3CSBOWGlSorFaSmUEKxqxSKhAJPZOYjKxRXilFeYFphVR1rIaikZy2vGf6LshwkwO01xUPZn6B28H3l87ecVlg74%2BwL1fys3RXktJvVyuVzyS5H7cCacUkZoSRJknH640cUdmhIqXugW7PkBrZvkRM6xw%2FreshvyBmq%2BJq%2B77d73Vv%2FNPvkwqHg%2FCsvZ%2FGJT8TMqJwej0bazpkVk3ZC3t7j%2BBw%3D%3D&RelayState=__HOST-arcb550b1&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=Zb6FJLvszipnfr8oibrmNN%2FdiZ6ifdPPUSuRy86owxUbOkt422zDMp0fUUQSMuOszhV0RG6lkJ9mpfj39KAUOWWoJRQBSW8AW4FLF2Gmpe72vw3t%2B%2BqSkRBt5VYsP1ILaWZ2gY9xHp%2Bl84nFavlJYOL85Eyeu2eac0eAhUfpQBGMs4yjjqJn2Sip5e4SGmPdHKgBzBKlDGpFzYUb1UETCsOD8sqQJbPsPoW3imRo0T9aSIxH9Vx3AXbbU%2BUd5upijy0tNduIgXmZfvZ2nzEBd8Is5lU4rDM5fAdLpFUV9b%2Fpab7guikWXNO9CTAVSlnRoB%2BLd4FvV%2FT2Ig3TIGycBA%3D%3D#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 22:58:21 - INFO - sap_browser - Página cargada completamente
+2025-03-14 22:58:21 - INFO - sap_browser - Navegación exitosa a la página deseada
+2025-03-14 22:58:21 - INFO - sap_browser - Verificando si se requiere autenticación...
+2025-03-14 22:58:21 - INFO - sap_browser - No se requiere autenticación, ya hay una sesión activa
+2025-03-14 22:58:21 - INFO - sap_browser - Seleccionando cliente 1025541 mediante API directa de UI5
+2025-03-14 22:58:23 - WARNING - sap_browser - La selección UI5 directa no tuvo éxito para 1025541, intentando método alternativo
+2025-03-14 22:58:23 - ERROR - sap_browser - Error en método alternativo de selección de cliente: Message: no such element: Unable to locate element: {"method":"xpath","selector":"//input[contains(@placeholder, 'Customer')]"}
+  (Session info: chrome=133.0.6943.142); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#no-such-element-exception
+Stacktrace:
+	GetHandleVerifier [0x00007FF78068C6A5+28789]
+	(No symbol) [0x00007FF7805F5B20]
+	(No symbol) [0x00007FF780488F9A]
+	(No symbol) [0x00007FF7804DF346]
+	(No symbol) [0x00007FF7804DF57C]
+	(No symbol) [0x00007FF780532B17]
+	(No symbol) [0x00007FF78050736F]
+	(No symbol) [0x00007FF78052F7E3]
+	(No symbol) [0x00007FF780507103]
+	(No symbol) [0x00007FF7804CFFC0]
+	(No symbol) [0x00007FF7804D1273]
+	GetHandleVerifier [0x00007FF7809D1AED+3458237]
+	GetHandleVerifier [0x00007FF7809E829C+3550316]
+	GetHandleVerifier [0x00007FF7809DDB9D+3507565]
+	GetHandleVerifier [0x00007FF780752C6A+841274]
+	(No symbol) [0x00007FF7806009EF]
+	(No symbol) [0x00007FF7805FCB34]
+	(No symbol) [0x00007FF7805FCCD6]
+	(No symbol) [0x00007FF7805EC119]
+	BaseThreadInitThunk [0x00007FFE519F259D+29]
+	RtlUserThreadStart [0x00007FFE536AAF38+40]
+

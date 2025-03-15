@@ -1,0 +1,117 @@
+2025-03-14 23:42:58,472 - INFO - === Iniciando SAP Issues Extractor ===
+2025-03-14 23:42:59,747 - INFO - Ejecutando en modo GUI
+2025-03-14 23:42:59,750 - WARNING - Openpyxl no está instalado. El formato de Excel será limitado.
+2025-03-14 23:43:00,510 - ERROR - Error al cargar configuración: stat: path should be string, bytes, os.PathLike or integer, not NoneType
+2025-03-14 23:43:07,956 - INFO - Iniciando navegador con perfil guardado...
+2025-03-14 23:43:11,755 - ERROR - Error al iniciar Chrome: Message: session not created: Chrome failed to start: crashed.
+  (session not created: DevToolsActivePort file doesn't exist)
+  (The process started from chrome location C:\Program Files\Google\Chrome\Application\chrome.exe is no longer running, so ChromeDriver is assuming that Chrome has crashed.)
+Stacktrace:
+	GetHandleVerifier [0x00007FF78068C6A5+28789]
+	(No symbol) [0x00007FF7805F5B20]
+	(No symbol) [0x00007FF780488F9A]
+	(No symbol) [0x00007FF7804C5817]
+	(No symbol) [0x00007FF7804C15AD]
+	(No symbol) [0x00007FF78051555B]
+	(No symbol) [0x00007FF780514B30]
+	(No symbol) [0x00007FF780507103]
+	(No symbol) [0x00007FF7804CFFC0]
+	(No symbol) [0x00007FF7804D1273]
+	GetHandleVerifier [0x00007FF7809D1AED+3458237]
+	GetHandleVerifier [0x00007FF7809E829C+3550316]
+	GetHandleVerifier [0x00007FF7809DDB9D+3507565]
+	GetHandleVerifier [0x00007FF780752C6A+841274]
+	(No symbol) [0x00007FF7806009EF]
+	(No symbol) [0x00007FF7805FCB34]
+	(No symbol) [0x00007FF7805FCCD6]
+	(No symbol) [0x00007FF7805EC119]
+	BaseThreadInitThunk [0x00007FFE519F259D+29]
+	RtlUserThreadStart [0x00007FFE536AAF38+40]
+. Verificando si hay instancias abiertas...
+2025-03-14 23:43:24,153 - INFO - Iniciando navegador con perfil guardado...
+2025-03-14 23:43:26,403 - INFO - Navegador Chrome iniciado correctamente
+2025-03-14 23:43:26,405 - INFO - Navegador iniciado
+2025-03-14 23:43:26,405 - INFO - Intentando navegar a: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 23:43:36,160 - INFO - URL actual después de navegación: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZLBjtMwEIZfJfKeHTuO0yRWWqlQISotUG0LB26u43QtJePicSi8Pdl0UffSvdrfaL5%2FZpr1GJ%2Fhyf4aLcZkjWhDdB4%2BesBxsGFvw29n7PenxyV5jvGMijFtjB8hYor6nBo%2FMNRDL5hrz9MXkmQXfPTG9x8ctA5OSzIGUF6jQwV6sKiiUfv1l0clUq6OVwjV58NhR3ff9geSbCYVB%2FrF49a19ycH6eBM8Oi76KF3YOf2UnTlolwY2smioFLkhlaiW9DWiLauyzrTXXl1JMl2syT7qmpNxXlFdWdKKrUt6LGsamokP9rCVNqWfEIRR7sFjBrikgguCspzmhUHLpXMVS7TvCh%2FkuSHDTibTnFI8mfoAd%2BPfH6dzyusAMX7Bfr%2FVm4V8jqYaS6XyyW95KkPJyY4zxiXbIIsmIcbnd%2BhOeP1C92iOz2QVTOZqDl2WN1bdsPeQM3XyXW72fnemb%2FJJx8GHe9HydJsfnEt7WZUjYBna1znbEvYqmFvb3H1Dw%3D%3D&RelayState=__HOST-arcb31f07&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=YxQbR6Kbpikq8jpb%2F0ZfEFGLDPn8BKOMRkUGpSECxEnJDEHEN0jOlIfVRnxEKZG6ZRVpjFe0cRRgp0rDWLpkzfePar18jYAkx%2FHZxksbthfixwpeUVz4gOLYYRc2MzZDemHdfukXzQGuAf3j9%2FRh2uL93nJ3KrK0lC2ZpA%2BkKw8LthM7dGnUzUR9bJsyMkurccFdinzt2Iya2VWqClRMsG4kkkRJJdBbmvSojEDZd3fQv7nw5otPuwZLqbG7Z5aNlgsc%2F3H%2BhR1ycVBeRZ6M50y1jkCtT6liaZif2TdXVnmP9XANNHC9mpONcUAcHBlk3KDJ4lzw0rITua%2BQlkViPA%3D%3D&sso_reload=true
+2025-03-14 23:43:36,162 - WARNING - Detectada redirección no deseada, intentando navegación por JavaScript
+2025-03-14 23:43:45,114 - INFO - URL después de navegación por JavaScript: https://sts.global.corp.sap/adfs/ls/?client-request-id=dae15a52-5a48-4787-8cd0-c9d0ed686188&wa=wsignin1.0&wtrealm=urn%3afederation%3aMicrosoftOnline&wctx=LoginOptions%3D3%26estsredirect%3d2%26estsrequest%3drQQIARAA42KwksgoKSkottLXT0xOzi_NKynWK04s0EvOzy0S4hLwr77ieCYixW8Wc947leD8qlWMariU6xcn5uYY6WemFAClig8xqgZbGhulJKekpuiaJycl6pqYGJjpWhgmpugmJ1kmm5glJRkkG6RcYGR8wch4i4k1GKT7F5NpaVGeVX5icWaxVV5ibmqxVUmyVbCjr4-VoZ4hWCQzRTctvyg3scSqNK-4IDU5My0zNWUWs0B8vId_cIhuYlFyirGBUbLRJmYVE6M0czNzs2TdNBNTU10TI-NkXQujNDPdlGSjFEtLc0vDxDTzR8zSqTnZmXl6QI2ZOYl6aTn5RalVDlA_XWDhecXCY8BsxcHBJcAgwaDA8IOFcRErMGCcE_feeZFwxm_yl6XplfYJDKdY9Q0dCzzLA7OMnUPTis2y9KPyi12DnT2z3RO19VPDU7MrAwu10zzNTIqNCwJtTa0MJ7DxnmJj-MDG2MHOMIudYRcnkSF7gJfhB9_kebPn739_453HK34d7Rwf75AUgzDTrFAzl6RyFzOTqtJyR89c33T9Ci8jfWfPIMes0rzgTH8PT9sNAgwPBBgA0&cbcxt=&username=elkin.arcila.florez%40sap.com&mkt=&lc=
+2025-03-14 23:43:45,115 - WARNING - Redirección persistente, intentando método forzado
+2025-03-14 23:43:53,292 - INFO - URL final después de todos los intentos: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 23:43:53,309 - INFO - Página cargada completamente
+2025-03-14 23:43:53,311 - INFO - Navegación exitosa a la página deseada
+2025-03-14 23:44:16,068 - ERROR - No se pudo conectar a sesión existente: Message: session not created: cannot connect to chrome at 127.0.0.1:9222
+from chrome not reachable
+Stacktrace:
+	GetHandleVerifier [0x00007FF78068C6A5+28789]
+	(No symbol) [0x00007FF7805F5B20]
+	(No symbol) [0x00007FF780488DCC]
+	(No symbol) [0x00007FF780479B91]
+	(No symbol) [0x00007FF7804CBC62]
+	(No symbol) [0x00007FF7804C0CBE]
+	(No symbol) [0x00007FF78051555B]
+	(No symbol) [0x00007FF780514B30]
+	(No symbol) [0x00007FF780507103]
+	(No symbol) [0x00007FF7804CFFC0]
+	(No symbol) [0x00007FF7804D1273]
+	GetHandleVerifier [0x00007FF7809D1AED+3458237]
+	GetHandleVerifier [0x00007FF7809E829C+3550316]
+	GetHandleVerifier [0x00007FF7809DDB9D+3507565]
+	GetHandleVerifier [0x00007FF780752C6A+841274]
+	(No symbol) [0x00007FF7806009EF]
+	(No symbol) [0x00007FF7805FCB34]
+	(No symbol) [0x00007FF7805FCCD6]
+	(No symbol) [0x00007FF7805EC119]
+	BaseThreadInitThunk [0x00007FFE519F259D+29]
+	RtlUserThreadStart [0x00007FFE536AAF38+40]
+
+2025-03-14 23:44:20,150 - ERROR - Error al iniciar Navegador: Message: session not created: Chrome failed to start: crashed.
+  (session not created: DevToolsActivePort file doesn't exist)
+  (The process started from chrome location C:\Program Files\Google\Chrome\Application\chrome.exe is no longer running, so ChromeDriver is assuming that Chrome has crashed.)
+Stacktrace:
+	GetHandleVerifier [0x00007FF78068C6A5+28789]
+	(No symbol) [0x00007FF7805F5B20]
+	(No symbol) [0x00007FF780488F9A]
+	(No symbol) [0x00007FF7804C5817]
+	(No symbol) [0x00007FF7804C15AD]
+	(No symbol) [0x00007FF78051555B]
+	(No symbol) [0x00007FF780514B30]
+	(No symbol) [0x00007FF780507103]
+	(No symbol) [0x00007FF7804CFFC0]
+	(No symbol) [0x00007FF7804D1273]
+	GetHandleVerifier [0x00007FF7809D1AED+3458237]
+	GetHandleVerifier [0x00007FF7809E829C+3550316]
+	GetHandleVerifier [0x00007FF7809DDB9D+3507565]
+	GetHandleVerifier [0x00007FF780752C6A+841274]
+	(No symbol) [0x00007FF7806009EF]
+	(No symbol) [0x00007FF7805FCB34]
+	(No symbol) [0x00007FF7805FCCD6]
+	(No symbol) [0x00007FF7805EC119]
+	BaseThreadInitThunk [0x00007FFE519F259D+29]
+	RtlUserThreadStart [0x00007FFE536AAF38+40]
+
+2025-03-14 23:44:33,053 - INFO - Archivo Excel creado exitosamente: C:/Users/I756356/Documents/GitHub/Scrapping/Seguimiento_Issues_SAP_20250314_234426.xlsx
+2025-03-14 23:44:33,053 - INFO - Creado nuevo archivo Excel: C:/Users/I756356/Documents/GitHub/Scrapping/Seguimiento_Issues_SAP_20250314_234426.xlsx
+2025-03-14 23:44:45,382 - INFO - Intentando seleccionar automáticamente el cliente 1025541...
+2025-03-14 23:44:45,383 - INFO - Seleccionando cliente 1025541 mediante API directa de UI5
+2025-03-14 23:44:45,523 - INFO - Cliente 1025541 ya está seleccionado
+2025-03-14 23:44:45,524 - INFO - Cliente 1025541 seleccionado exitosamente con método UI5 directo
+2025-03-14 23:44:45,525 - INFO - Cliente 1025541 seleccionado con éxito
+2025-03-14 23:44:45,530 - INFO - Esperando a que cargue la lista de proyectos...
+2025-03-14 23:44:50,532 - INFO - Intento 1/3 de selección de proyecto
+2025-03-14 23:44:50,535 - INFO - Seleccionando proyecto 20096444 automáticamente...
+2025-03-14 23:44:50,537 - INFO - Seleccionando proyecto 20096444 a través de UI5 directo
+2025-03-14 23:44:53,569 - WARNING - Verificación estricta falló: Proyecto 20096444 no está seleccionado
+2025-03-14 23:44:53,570 - INFO - Método UI5 directo falló, intentando método estándar...
+2025-03-14 23:44:53,918 - INFO - Esperando a que los datos de proyectos estén disponibles...
+2025-03-14 23:45:24,174 - WARNING - Timeout esperando a que se cargue la lista de proyectos
+2025-03-14 23:45:24,216 - INFO - Campo de proyecto encontrado con selector: //input[contains(@placeholder, 'Project')]
+2025-03-14 23:45:25,506 - INFO - ID de proyecto 20096444 ingresado en campo
+2025-03-14 23:45:27,567 - INFO - Tecla ENTER presionada para buscar proyecto
+2025-03-14 23:45:30,581 - INFO - Buscando proyecto en resultados...
+2025-03-14 23:45:31,708 - INFO - Proyecto 20096444 seleccionado con clic de JavaScript
+2025-03-14 23:45:34,711 - INFO - Proyecto 20096444 seleccionado con éxito en el intento 1
+2025-03-14 23:45:35,715 - INFO - Buscando botón de búsqueda...
+2025-03-14 23:46:01,331 - INFO - Clic en icono de búsqueda exitoso
+2025-03-14 23:46:03,333 - INFO - Iniciando proceso de extracción
+2025-03-14 23:46:03,335 - INFO - Comenzando proceso de extracción...
+2025-03-14 23:46:03,346 - ERROR - Error general en el proceso de extracción: 'SAPBrowser' object has no attribute 'find_table_rows'

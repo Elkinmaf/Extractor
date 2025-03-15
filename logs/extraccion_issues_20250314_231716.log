@@ -1,0 +1,21 @@
+2025-03-14 23:17:16 - INFO - sap_browser - Iniciando navegador con perfil guardado...
+2025-03-14 23:17:18 - INFO - sap_browser - Navegador Chrome iniciado correctamente
+2025-03-14 23:17:18 - INFO - sap_browser - Intentando navegar a: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 23:17:33 - INFO - sap_browser - URL actual después de navegación: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZJfb9sgFMW%2FikWfMRj%2Fi5ETKVtULVK3RU3ah70xDCmSDS4XL9u3H3FapS%2FpK%2FyOzjn33nY9hRf7qF4nBSFZAygfjLNfnYVpUH6v%2FB8j1dPjwxK9hDACJ0RI6SYbIAUxptINBMTQM2K6MX4BSnbeBSdd%2F8XYztjjEk3ecifAALdiUMCD5Pv19wfOUsp%2FXyDg3w6HHd793B9QsolRjBXnHFfX3h2NTQcjvQOng7O9sWq2L5iuq7qSWBdliQuWS7xgusKdZF3T1E0mdH3JiJLtZon2rKxqlVOGm1ycBYsFFkWmca27ppSS1RmrIgowqa2FIGxYIkZZiWmOs%2FJAC57VnFVptPuFkmflYU4a66Dk79Bb%2BLzy%2BDafN5hbYJ8LxPtWroriMpg4l9PplJ7y1PkjYZRmhBYkQsrKuyud36Apoc2Z7sAc79CqjUn4XNuvbi27JR%2Bg9kfMut3sXG%2Fkv%2BTe%2BUGE21WyNJtfTIf1jPLJwqik0UZ1iKxa8vEWV%2F8B&RelayState=__HOST-arcc31409&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=es6SlJlaN2OEnkkURTxCq9WJjQr2aO1KJdrwwR1ip2RUn9C1lvp3PM%2BValECypcezDZ0dMjoVsYntrcCcNcqC%2B0fq%2B9BMtn%2BMQ5cSOIaGVtK1JDcbKlGbaPB4vP%2FuyO7D7E1WiH8wtn3%2FhL%2FjSVOv4iYlgSTP%2FQ3yxzbCIywUoyTp3fAdo6M963abZSrbTfbA37Lb2TQje2mLgxTc3oCXnCH2u2BmuwNWSrrB0iLdjtuQT6vLFzI2c2CJ8UPavS2n6GkTwIS9anqMF%2BAzIOC1e0JaYFXY5HY2LXLDd%2B%2FrjCrgdL8YrEB8RXSr3xdArpPj6flpCsoROPK%2BBef11N6Pg%3D%3D&sso_reload=true
+2025-03-14 23:17:33 - WARNING - sap_browser - Detectada redirección no deseada, intentando navegación por JavaScript
+2025-03-14 23:17:45 - INFO - sap_browser - URL después de navegación por JavaScript: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 23:17:45 - INFO - sap_browser - URL final después de todos los intentos: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-14 23:17:45 - INFO - sap_browser - Página cargada completamente
+2025-03-14 23:17:45 - INFO - sap_browser - Navegación exitosa a la página deseada
+2025-03-14 23:17:45 - INFO - sap_browser - Verificando si se requiere autenticación...
+2025-03-14 23:17:45 - INFO - sap_browser - No se requiere autenticación, ya hay una sesión activa
+2025-03-14 23:17:45 - INFO - sap_browser - Seleccionando cliente 1025541 mediante API directa de UI5
+2025-03-14 23:17:48 - WARNING - sap_browser - La selección UI5 directa no tuvo éxito para 1025541, intentando método alternativo
+2025-03-14 23:17:48 - INFO - sap_browser - Campo de cliente encontrado con selector: //input[contains(@placeholder, 'Customer')]
+2025-03-14 23:17:48 - INFO - sap_browser - Limpiando campo de cliente
+2025-03-14 23:17:49 - INFO - sap_browser - Ingresando valor 1025541
+2025-03-14 23:17:54 - INFO - sap_browser - Ejecutando secuencia DOWN + DOWN + DOWN + ENTER
+2025-03-14 23:17:58 - INFO - sap_browser - Interactuando con dropdown SAP UI5...
+2025-03-14 23:18:07 - INFO - sap_browser - Intentando estrategia final: TAB + ENTER
+2025-03-14 23:18:09 - INFO - sap_browser - Interactuando con dropdown SAP UI5...
+2025-03-14 23:18:18 - INFO - sap_browser - Intentando estrategia final: TAB + ENTER

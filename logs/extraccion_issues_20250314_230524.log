@@ -1,0 +1,30 @@
+2025-03-14 23:05:24,889 - INFO - === Iniciando SAP Issues Extractor ===
+2025-03-14 23:05:26,135 - INFO - Ejecutando en modo GUI
+2025-03-14 23:05:26,161 - WARNING - Openpyxl no está instalado. El formato de Excel será limitado.
+2025-03-14 23:06:35,090 - INFO - Iniciando navegador con perfil guardado...
+2025-03-14 23:06:39,116 - ERROR - Error al iniciar Chrome: Message: session not created: Chrome failed to start: crashed.
+  (session not created: DevToolsActivePort file doesn't exist)
+  (The process started from chrome location C:\Program Files\Google\Chrome\Application\chrome.exe is no longer running, so ChromeDriver is assuming that Chrome has crashed.)
+Stacktrace:
+	GetHandleVerifier [0x00007FF78068C6A5+28789]
+	(No symbol) [0x00007FF7805F5B20]
+	(No symbol) [0x00007FF780488F9A]
+	(No symbol) [0x00007FF7804C5817]
+	(No symbol) [0x00007FF7804C15AD]
+	(No symbol) [0x00007FF78051555B]
+	(No symbol) [0x00007FF780514B30]
+	(No symbol) [0x00007FF780507103]
+	(No symbol) [0x00007FF7804CFFC0]
+	(No symbol) [0x00007FF7804D1273]
+	GetHandleVerifier [0x00007FF7809D1AED+3458237]
+	GetHandleVerifier [0x00007FF7809E829C+3550316]
+	GetHandleVerifier [0x00007FF7809DDB9D+3507565]
+	GetHandleVerifier [0x00007FF780752C6A+841274]
+	(No symbol) [0x00007FF7806009EF]
+	(No symbol) [0x00007FF7805FCB34]
+	(No symbol) [0x00007FF7805FCCD6]
+	(No symbol) [0x00007FF7805EC119]
+	BaseThreadInitThunk [0x00007FFE519F259D+29]
+	RtlUserThreadStart [0x00007FFE536AAF38+40]
+. Verificando si hay instancias abiertas...
+2025-03-14 23:07:10,701 - INFO - === Proceso de extracción finalizado ===
