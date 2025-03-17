@@ -132,6 +132,11 @@ class IssuesExtractor:
             
         return success, new_items, updated_items
         
+
+
+
+
+
     def run_extraction(self):
         """
         Ejecuta el proceso completo de extracción
@@ -265,7 +270,27 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Realizando búsqueda...")
                 
-            self.browser.click_search_button()
+            # Hacer clic en búsqueda utilizando el nuevo método
+            if not self.browser.click_search_button():
+                logger.warning("Error al hacer clic en el botón de búsqueda automáticamente")
+                # Solicitar acción manual
+                if hasattr(self, 'root') and self.root:
+                    messagebox.showwarning("Acción Manual Requerida", 
+                        "No se pudo hacer clic en el botón de búsqueda automáticamente.\n\n"
+                        "Por favor, haga clic manualmente en el botón de búsqueda.")
+                    result = messagebox.askokcancel("Confirmación", "¿Ha hecho clic en el botón de búsqueda?")
+                    if not result:
+                        return False
+            
+            # Esperar a que se carguen los resultados de la búsqueda
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Esperando resultados de búsqueda...")
+                
+            # Esperar resultados utilizando el nuevo método
+            if not self.browser.wait_for_search_results():
+                logger.warning("No se pudo confirmar la carga de resultados")
+                # Dar tiempo adicional y continuar de todos modos
+                time.sleep(5)
             
             # Continuar con la detección y extracción de issues
             if hasattr(self, 'status_var') and self.status_var:
@@ -281,6 +306,28 @@ class IssuesExtractor:
                     if not result:
                         return False
             
+            # PASO OBLIGATORIO: Hacer clic en el botón de ajustes
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Accediendo a ajustes...")
+                
+            # Intentar hacer clic en ajustes de forma automática
+            if not self.browser.click_settings_button():
+                logger.warning("No se pudo hacer clic automáticamente en el botón de ajustes")
+                # Solicitar acción manual ya que este paso es obligatorio
+                if hasattr(self, 'root') and self.root:
+                    messagebox.showwarning("Acción Manual Requerida", 
+                        "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
+                        "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha.")
+                    result = messagebox.askokcancel("Confirmación", "¿Ha hecho clic en el botón de ajustes?")
+                    if not result:
+                        logger.error("Usuario canceló después de no poder hacer clic en ajustes")
+                        if hasattr(self, 'status_var') and self.status_var:
+                            self.status_var.set("Proceso cancelado: No se pudo acceder a ajustes")
+                        return False
+            
+            # Esperar un momento para que se abra el panel de ajustes
+            time.sleep(2)
+            
             # Realizar la extracción
             return self.perform_extraction()
                 
@@ -292,7 +339,14 @@ class IssuesExtractor:
                 self.status_var.set(f"Error: {e}")
                 
             return False
-
+        
+    
+    
+    
+    
+    
+    
+    
     def navigate_to_issues_tab(self):
         """
         Navega a la pestaña 'Issues' una vez seleccionado el proyecto.
@@ -357,9 +411,15 @@ class IssuesExtractor:
             logger.error(f"Error al navegar a la pestaña Issues: {e}")
             return False
     
+    
+    
+    
+    
+    
+    
     def perform_extraction(self):
         """
-        Método principal para ejecutar el proceso de extracción
+        Método principal para ejecutar el proceso de extracción.
         
         Este método coordina la extracción de datos una vez que la navegación
         y selección de cliente/proyecto ha sido completada.
@@ -418,59 +478,36 @@ class IssuesExtractor:
             if not in_issues_page:
                 logger.warning("No se detectó la página de Issues. Intentando hacer clic en la pestaña...")
                 
-                tab_selectors = [
-                    "//div[@role='tab' and contains(text(), 'Issues')]",
-                    "//a[contains(text(), 'Issues')]",
-                    "//li[contains(@class, 'tab') and contains(., 'Issues')]",
-                    "//div[contains(@class, 'sapMITBItem') and contains(., 'Issues')]",
-                    "//div[contains(@class, 'sapMITBItem')]//span[contains(text(), 'Issues')]/..",
-                    "//*[contains(text(), 'Issues') and not(contains(text(), '('))]"
-                ]
-                
-                issue_tab_found = False
-                for selector in tab_selectors:
-                    try:
-                        issue_tabs = self.driver.find_elements(By.XPATH, selector)
-                        if issue_tabs:
-                            for tab in issue_tabs:
-                                try:
-                                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tab)
-                                    time.sleep(1)
-                                    
-                                    try:
-                                        self.driver.execute_script("arguments[0].click();", tab)
-                                        logger.info(f"Clic en pestaña Issues realizado con JavaScript: {tab.text}")
-                                        time.sleep(3)
-                                        issue_tab_found = True
-                                        break
-                                    except:
-                                        tab.click()
-                                        logger.info(f"Clic en pestaña Issues realizado: {tab.text}")
-                                        time.sleep(3)
-                                        issue_tab_found = True
-                                        break
-                                except Exception as click_e:
-                                    logger.debug(f"Error al hacer clic en pestaña: {click_e}")
-                                    continue
-                            
-                            if issue_tab_found:
-                                break
-                    except Exception as e:
-                        logger.debug(f"Error con selector {selector}: {e}")
-                
-                if issue_tab_found:
-                    try:
-                        issues_title_elements = self.driver.find_elements(
-                            By.XPATH, "//div[contains(text(), 'Issues') and contains(text(), '(')]"
-                        )
-                        if issues_title_elements:
-                            logger.info(f"Página de Issues detectada después de clic: {issues_title_elements[0].text}")
-                            in_issues_page = True
-                    except:
-                        pass
+                if not self.navigate_to_issues_tab():
+                    logger.warning("No se pudo navegar a la pestaña de Issues")
+                else:
+                    in_issues_page = True
+                    
+                # Esperar a que cargue la página
+                time.sleep(3)
             
-            if not in_issues_page:
-                logger.warning("No se pudo confirmar que estamos en la página de Issues, pero intentaremos extraer datos de todos modos.")
+            # ====== NOVEDAD: SELECCIÓN DE TODAS LAS COLUMNAS ======
+            # Seleccionar todas las columnas disponibles para maximizar datos extraídos
+            if hasattr(self.browser, 'select_all_visible_columns'):
+                logger.info("Intentando seleccionar todas las columnas disponibles...")
+                
+                # Actualizar la interfaz si existe
+                if hasattr(self, 'status_var') and self.status_var:
+                    self.status_var.set("Configurando columnas visibles...")
+                    if self.root:
+                        self.root.update()
+                        
+                columns_configured = self.browser.select_all_visible_columns()
+                
+                if columns_configured:
+                    logger.info("✅ Columnas configuradas correctamente para extracción completa")
+                    
+                    # Esperar a que se recargue la tabla con las nuevas columnas
+                    time.sleep(3)
+                else:
+                    logger.warning("⚠️ No se pudieron configurar todas las columnas")
+            else:
+                logger.warning("La función de selección de columnas no está disponible")
             
             # Intentar extracción con reintentos
             max_attempts = 3
@@ -564,6 +601,12 @@ class IssuesExtractor:
             
             self.processing = False
             return False
+
+
+
+
+
+
 
     def _fill_fields_and_extract(self, erp_number, project_id):
         """

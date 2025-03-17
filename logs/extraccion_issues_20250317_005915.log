@@ -1,0 +1,26 @@
+2025-03-17 00:59:15 - INFO - sap_browser - Iniciando navegador con perfil guardado...
+2025-03-17 00:59:19 - ERROR - sap_browser - Error al iniciar Chrome: Message: session not created: Chrome failed to start: crashed.
+  (session not created: DevToolsActivePort file doesn't exist)
+  (The process started from chrome location C:\Program Files\Google\Chrome\Application\chrome.exe is no longer running, so ChromeDriver is assuming that Chrome has crashed.)
+Stacktrace:
+	GetHandleVerifier [0x00007FF6BAC2C6A5+28789]
+	(No symbol) [0x00007FF6BAB95B20]
+	(No symbol) [0x00007FF6BAA28F9A]
+	(No symbol) [0x00007FF6BAA65817]
+	(No symbol) [0x00007FF6BAA615AD]
+	(No symbol) [0x00007FF6BAAB555B]
+	(No symbol) [0x00007FF6BAAB4B30]
+	(No symbol) [0x00007FF6BAAA7103]
+	(No symbol) [0x00007FF6BAA6FFC0]
+	(No symbol) [0x00007FF6BAA71273]
+	GetHandleVerifier [0x00007FF6BAF71AED+3458237]
+	GetHandleVerifier [0x00007FF6BAF8829C+3550316]
+	GetHandleVerifier [0x00007FF6BAF7DB9D+3507565]
+	GetHandleVerifier [0x00007FF6BACF2C6A+841274]
+	(No symbol) [0x00007FF6BABA09EF]
+	(No symbol) [0x00007FF6BAB9CB34]
+	(No symbol) [0x00007FF6BAB9CCD6]
+	(No symbol) [0x00007FF6BAB8C119]
+	BaseThreadInitThunk [0x00007FF8C20F259D+29]
+	RtlUserThreadStart [0x00007FF8C3C2AF38+40]
+. Verificando si hay instancias abiertas...

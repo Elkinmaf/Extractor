@@ -1,0 +1,33 @@
+2025-03-17 01:31:38 - INFO - sap_browser - Iniciando navegador con perfil guardado...
+2025-03-17 01:31:41 - INFO - sap_browser - Navegador Chrome iniciado correctamente
+2025-03-17 01:31:41 - INFO - sap_browser - Intentando navegar a: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-17 01:31:56 - INFO - sap_browser - URL actual después de navegación: https://login.microsoftonline.com/42f7676c-f455-423c-82f6-dc2d99791af7/saml2?SAMLRequest=fZLBjtsgEIZfxWLPGAw4jpETKW1UNdK2jTZpD70RDFkkG1wGN%2B3b1%2Btslb1kr%2FCN5vtnptmM6dk%2FmV%2BjgZRtAExMLviPwcPYm3gw8bfT5vvT4wo9pzSAJERpHUafIAc15Dr0BFTfMeLaYfoClO1jSEGH7oPzrfPnFRqjl0GBA%2BlVb0AmLQ%2BbL4%2BS5VSerhDIz8fjHu%2B%2FHY4o204qzqsXj1vXLpydz3unY4BgU%2FCd82ZuL5itFtVCYyvKEgvGNV4yu8CtZm1dV3WhbHV1RNluu0KHYkltIdoSn2qhsVD8hE%2FlkmMhRKEUs7aq%2BIQCjGbnISmfVohRVmLKcVEd6ULyQoo6L3n9E2U%2FTITZdIqDsj995%2BH9yMPrfF5h6YG9X6D%2Bb%2BVWIa6DmeZyuVzyC89DPBNGaUGoIBNkvH640fwOTQmtX%2BgW3PkBrZvJRM6x4%2FreshvyBmq%2BTq677T50Tv%2FNPoXYq3Q%2FSpEX84trsZ1ROXoYjHbWmRaRdUPe3uL6Hw%3D%3D&RelayState=__HOST-arc221e99&SigAlg=http%3A%2F%2Fwww.w3.org%2F2001%2F04%2Fxmldsig-more%23rsa-sha256&Signature=tLv40vRYXW%2BygiRzY87zh82AW%2BkdbA9LvQD9hNnC9VrpakC1TMPDgVm6UKUCwODkZBVTP%2BHOgl2%2FCE%2BUH7ZmEgu57EREoGp4huK6FmLP5slLCtfQQ3KHgSjIblHxQlZvLBMIAz5d4%2Bf8yRczOQo7RO4saE%2FEZ0TRo0EMvSRhfnT%2Fs9tS%2Fx%2FsPw%2B6gCW%2FXG7UkrKa%2BIdYmRRFd3UwJCbPkekD%2BvuUxeO2%2F2nXYP8YkCTjKeC4K1LGFJOAjBl%2FdOvr7JlVSsqoVN5Pgz0eaya%2F9gfrKPlQYkR%2By77Lq6BiWz5wE%2Bcex3cdsMK49ro8HULOuV1nzKf1jyJDdtVy1tHvmQ%3D%3D&sso_reload=true
+2025-03-17 01:31:56 - WARNING - sap_browser - Detectada redirección no deseada, intentando navegación por JavaScript
+2025-03-17 01:32:10 - INFO - sap_browser - URL después de navegación por JavaScript: https://sts.global.corp.sap/adfs/ls/?client-request-id=227f7cc7-6e41-49cd-9914-bfdf5dabed43&wa=wsignin1.0&wtrealm=urn%3afederation%3aMicrosoftOnline&wctx=LoginOptions%3D3%26estsredirect%3d2%26estsrequest%3drQQIARAA42KwksgoKSkottLXT0xOzi_NKynWK04s0EvOzy0S4hJQOrh0PUuTvPumrGn6vmXbjq5iVMOlXL84MTfHSD8zpQAoVXyIUTXYKM0kMdnSLEnXNC3NWNfEONlS18LEIFE3xdjIKDHF1NLELMXyAiPjC0bGW0yswSDdv5hMS4vyrPITizOLrfISc1OLrUqSrYIdfX2sDPUMwSKZKbpp-UW5iSVWpXnFBanJmWmZqSmzmAXi4z38g0N0E4uSk9ISjYwTNzGrmBilmZuZmyXrppmYmuqaGBkn61oYpZnppiQbpVhamlsaJqaZP2KWTs3JzszTA2rMzEnUS8vJL0qtcoD66QILzysWHgNmKw4OLgEGCQYFhh8sjItYgQEjuP_cMa_a716tX180Vl_aynCKVT-gLDzDMtsyNK-8oNAnKtPRMM0nNSk0LS2nxDzRKye30MK12Mm8zNjdwyfZ1sLKcAIb7yk2hg9sjB3sDLPYGXZxEhmyB3gZfvC1zOq7d23xzXcer_h1XEyL8vLKkn2CzMoNnAtCK4pKXCsD0509Qwz9LCNKjc1yynMjXMrzzFLdHW03CDA8EGAAAA2&cbcxt=&username=elkin.arcila.florez%40sap.com&mkt=&lc=
+2025-03-17 01:32:10 - WARNING - sap_browser - Redirección persistente, intentando método forzado
+2025-03-17 01:32:17 - INFO - sap_browser - URL final después de todos los intentos: https://xalm-prod.x.eu20.alm.cloud.sap/launchpad#iam-ui&/?erpNumber=1025541&crmProjectId=20096444&x-app-name=HEP
+2025-03-17 01:32:17 - INFO - sap_browser - Página cargada completamente
+2025-03-17 01:32:17 - INFO - sap_browser - Navegación exitosa a la página deseada
+2025-03-17 01:32:17 - INFO - sap_browser - Verificando si se requiere autenticación...
+2025-03-17 01:32:17 - INFO - sap_browser - No se requiere autenticación, ya hay una sesión activa
+2025-03-17 01:32:22 - INFO - sap_browser - Verificando si los campos ya contienen los valores esperados: Cliente 1025541, Proyecto 20096444
+2025-03-17 01:32:22 - INFO - sap_browser - ✓ Campo de proyecto contiene '20096444'
+2025-03-17 01:32:22 - INFO - sap_browser - ✓ Project ID '20096444' encontrado en el texto de la página
+2025-03-17 01:32:22 - INFO - sap_browser - ✓ Interfaz correcta detectada: //div[contains(@class, 'sapMITBHead')]
+2025-03-17 01:32:22 - INFO - sap_browser - ⚠️ No se pudieron confirmar valores esperados en los campos
+2025-03-17 01:32:22 - INFO - sap_browser - Seleccionando cliente 1025541 mediante API directa de UI5
+2025-03-17 01:32:22 - INFO - sap_browser - Cliente 1025541 ya está seleccionado
+2025-03-17 01:32:22 - INFO - sap_browser - Proyecto 20096444 verificado en elemento visible
+2025-03-17 01:32:22 - INFO - sap_browser - Intentando hacer clic en el botón de búsqueda...
+2025-03-17 01:32:23 - INFO - sap_browser - Clic en botón de búsqueda exitoso con JavaScript
+2025-03-17 01:32:26 - INFO - sap_browser - Esperando a que se carguen los resultados de la búsqueda...
+2025-03-17 01:32:26 - INFO - sap_browser - Resultados de búsqueda detectados: //div[contains(@class, 'sapMITBHead')]
+2025-03-17 01:32:29 - INFO - sap_browser - Resultados de búsqueda cargados correctamente
+2025-03-17 01:32:29 - INFO - sap_browser - Intentando hacer clic en el botón de ajustes (engranaje)...
+2025-03-17 01:32:32 - INFO - sap_browser - Captura previa al clic guardada en: logs\pre_settings_click_20250317_013232.png
+2025-03-17 01:32:32 - INFO - sap_browser - Encontrado botón de ajustes con selector: //button[contains(@id, 'settings')]
+2025-03-17 01:32:32 - INFO - sap_browser - Clic en botón de ajustes realizado con JavaScript
+2025-03-17 01:32:33 - WARNING - sap_browser - No se detectó el panel de ajustes después del clic
+2025-03-17 01:32:34 - INFO - sap_browser - Clic en botón de ajustes realizado con método normal
+2025-03-17 01:32:35 - INFO - sap_browser - Panel de ajustes detectado con selector: //div[contains(@class, 'sapMDialog') and contains(@class, 'sapMPopup-CTX')]
+2025-03-17 01:32:35 - INFO - sap_browser - Captura del panel de ajustes guardada en: logs\settings_panel_20250317_013235.png

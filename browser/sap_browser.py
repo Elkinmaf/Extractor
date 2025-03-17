@@ -5,10 +5,12 @@ Proporciona funcionalidades específicas para interactuar con aplicaciones SAP U
 
 import os
 import time
+import logging
 import re
 from datetime import datetime
 import tkinter as tk
 from tkinter import messagebox
+from typing import Optional, List, Dict, Union, Tuple
 
 # Importaciones de Selenium
 from selenium import webdriver
@@ -42,6 +44,17 @@ from browser.element_finder import (
     click_element_safely,
     optimize_browser_performance
 )
+
+
+
+# Importar el gestor de columnas
+from browser.column_selection_manager import ColumnSelectionManager, configurar_columnas_visibles
+
+
+
+# Configurar logger
+logger = logging.getLogger(__name__)
+
 
 class SAPBrowser:
     """Clase para la automatización del navegador y extracción de datos de SAP"""
@@ -1867,62 +1880,472 @@ class SAPBrowser:
         
         
         
- 
     def click_search_button(self):
         """
-        Hace clic en el botón de búsqueda para iniciar la consulta.
+        Hace clic en el botón de búsqueda después de que cliente y proyecto estén seleccionados.
+        Este paso es obligatorio en el flujo de extracción.
         
         Returns:
-            bool: True si el click fue exitoso, False en caso contrario
+            bool: True si el clic fue exitoso, False en caso contrario
         """
         try:
-            logger.info("Buscando botón de búsqueda...")
+            logger.info("Intentando hacer clic en el botón de búsqueda...")
             
-            # Diferentes selectores para el botón de búsqueda
+            # Múltiples selectores para el botón de búsqueda
             search_button_selectors = [
                 "//button[contains(@aria-label, 'Search')]",
-                "//button[@title='Search']",
-                "//span[contains(text(), 'Search')]/parent::button",
-                "//button[contains(@class, 'sapMBarChild') and contains(@class, 'sapMBtn')]",
-                "//div[contains(@class, 'sapMBarPH')]//button"
+                "//div[contains(@class, 'sapMBarMiddle')]//button",
+                "//div[contains(@class, 'sapMIBar')]//button",
+                "//div[contains(@class, 'sapMBarChild')]//button",
+                "//span[contains(text(), 'Search')]/ancestor::button",
+                "//div[contains(@class, 'sapMSearchField')]//div[contains(@class, 'sapMSearchFieldSearch')]",
+                "//div[contains(@class, 'sapMSearchFieldSearch')]"
             ]
             
+            # Probar cada selector
             for selector in search_button_selectors:
-                try:
-                    search_button = WebDriverWait(self.driver, 5).until(
-                        EC.element_to_be_clickable((By.XPATH, selector))
-                    )
-                    search_button.click()
-                    logger.info("Clic en botón de búsqueda exitoso")
-                    time.sleep(2)
-                    return True
-                except:
-                    continue
+                buttons = self.driver.find_elements(By.XPATH, selector)
+                if buttons:
+                    for button in buttons:
+                        if button.is_displayed() and button.is_enabled():
+                            # Intentar hacer clic con JavaScript (más confiable en SAP UI5)
+                            try:
+                                self.driver.execute_script("arguments[0].click();", button)
+                                logger.info("Clic en botón de búsqueda exitoso con JavaScript")
+                                time.sleep(3)  # Esperar a que responda
+                                return True
+                            except:
+                                # Si falla JavaScript, intentar clic normal
+                                button.click()
+                                logger.info("Clic en botón de búsqueda exitoso con método normal")
+                                time.sleep(3)
+                                return True
+                                
+            # Si no encontramos el botón con los selectores anteriores, 
+            # buscar el botón dentro del cuadro de búsqueda
+            try:
+                search_box = self.driver.find_element(By.XPATH, 
+                    "//div[contains(@class, 'sapMSearchField')]")
+                if search_box:
+                    # El botón de búsqueda suele ser un span o div con icono dentro del campo
+                    search_icon = search_box.find_element(By.XPATH, 
+                        ".//div[contains(@class, 'sapMSearchFieldSearch')] | .//span[contains(@class, 'sapMSearchFieldSearchIcon')]")
+                    if search_icon:
+                        self.driver.execute_script("arguments[0].click();", search_icon)
+                        logger.info("Clic en icono de búsqueda dentro del campo de búsqueda")
+                        time.sleep(3)
+                        return True
+            except:
+                pass
+                
+            # Si todavía no encontramos, probar con las coordenadas de clic en el campo de búsqueda
+            try:
+                search_field = self.driver.find_element(By.XPATH, 
+                    "//div[contains(@class, 'sapMSearchField')] | //input[contains(@type, 'search')]")
+                if search_field and search_field.is_displayed():
+                    # Hacer clic primero en el campo para activarlo
+                    search_field.click()
+                    time.sleep(1)
                     
-            # Si no se encuentra por selectores específicos, buscar por icono típico
-            icon_selectors = [
-                "//span[contains(@class, 'sapUiIcon') and contains(@class, 'sapMBtnIcon')]",
-                "//span[contains(@data-sap-ui, 'search')]"
+                    # Luego presionar Enter para ejecutar la búsqueda
+                    search_field.send_keys(Keys.ENTER)
+                    logger.info("Búsqueda ejecutada con clic + Enter en el campo de búsqueda")
+                    time.sleep(3)
+                    return True
+            except:
+                pass
+                
+            # Último recurso: buscar cualquier botón que pueda ser el de búsqueda
+            try:
+                # Script para buscar botones con iconos o ubicaciones que sugieran función de búsqueda
+                js_script = """
+                function findPotentialSearchButtons() {
+                    var allButtons = document.querySelectorAll('button');
+                    var searchButtons = [];
+                    
+                    for (var i = 0; i < allButtons.length; i++) {
+                        var btn = allButtons[i];
+                        
+                        // Verificar si el botón está visible
+                        if (btn.offsetParent !== null) {
+                            // Verificar si tiene un icono que podría ser de búsqueda
+                            var hasSearchIcon = btn.innerHTML.includes('search') || 
+                                            btn.innerHTML.includes('lupa') || 
+                                            btn.innerHTML.includes('magnify');
+                            
+                            // Verificar si está en la parte superior de la pantalla
+                            var rect = btn.getBoundingClientRect();
+                            var isInTopBar = rect.top < 100;
+                            
+                            if (hasSearchIcon || isInTopBar) {
+                                searchButtons.push(btn);
+                            }
+                        }
+                    }
+                    
+                    return searchButtons;
+                }
+                
+                return findPotentialSearchButtons();
+                """
+                
+                potential_buttons = self.driver.execute_script(js_script)
+                
+                if potential_buttons and len(potential_buttons) > 0:
+                    # Intentar con el primer botón potencial
+                    self.driver.execute_script("arguments[0].click();", potential_buttons[0])
+                    logger.info("Clic en botón potencial de búsqueda mediante JavaScript")
+                    time.sleep(3)
+                    return True
+            except:
+                pass
+                
+            logger.error("No se pudo encontrar o hacer clic en el botón de búsqueda")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al intentar hacer clic en el botón de búsqueda: {e}")
+            return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def wait_for_search_results(self, timeout=20):
+        """
+        Espera a que se carguen los resultados de la búsqueda.
+        Este paso es obligatorio en el flujo de extracción.
+        
+        Args:
+            timeout: Tiempo máximo de espera en segundos
+            
+        Returns:
+            bool: True si se detectan resultados, False si se agota el tiempo
+        """
+        try:
+            logger.info("Esperando a que se carguen los resultados de la búsqueda...")
+            
+            # Esperar a que desaparezcan los indicadores de carga
+            busy_indicators = [
+                "//div[contains(@class, 'sapUiLocalBusyIndicator')]",
+                "//div[contains(@class, 'sapMBusyIndicator')]",
+                "//div[contains(@class, 'sapUiBusy')]"
             ]
             
-            for selector in icon_selectors:
+            for indicator in busy_indicators:
                 try:
-                    search_icons = self.driver.find_elements(By.XPATH, selector)
-                    for icon in search_icons:
-                        # Verificar si el icono es visible
-                        if icon.is_displayed():
-                            self.driver.execute_script("arguments[0].click();", icon)
-                            logger.info("Clic en icono de búsqueda exitoso")
-                            time.sleep(2)
-                            return True
+                    WebDriverWait(self.driver, 5).until_not(
+                        EC.visibility_of_element_located((By.XPATH, indicator))
+                    )
                 except:
-                    continue
-                    
-            logger.warning("No se pudo hacer clic en botón de búsqueda")
-            return False
+                    pass
+            
+            # Esperar a que aparezcan ciertos elementos que indican resultados
+            result_indicators = [
+                "//div[contains(@class, 'sapMITBHead')]",  # Pestañas de navegación
+                "//div[contains(text(), 'Issues by Status')]",  # Panel de Issues by Status
+                "//div[contains(text(), 'Actions by Status')]",  # Panel de Actions by Status
+                "//div[contains(@class, 'sapMListItems')]",  # Lista de elementos
+                "//div[@role='tabpanel']"  # Panel de pestaña activa
+            ]
+            
+            # Intentar encontrar al menos uno de los indicadores de resultados
+            start_time = time.time()
+            results_found = False
+            
+            while not results_found and (time.time() - start_time) < timeout:
+                for indicator in result_indicators:
+                    elements = self.driver.find_elements(By.XPATH, indicator)
+                    if elements and any(e.is_displayed() for e in elements):
+                        results_found = True
+                        logger.info(f"Resultados de búsqueda detectados: {indicator}")
+                        break
+                
+                if not results_found:
+                    time.sleep(0.5)
+            
+            if results_found:
+                # Pausa adicional para permitir que la interfaz se estabilice
+                time.sleep(3)
+                logger.info("Resultados de búsqueda cargados correctamente")
+                return True
+            else:
+                logger.warning("No se detectaron resultados de búsqueda en el tiempo esperado")
+                
+                # Intentar verificar si hay otros indicadores de que la página ha cargado
+                alternative_indicators = [
+                    "//div[contains(@class, 'sapMPage')]",
+                    "//div[contains(@class, 'sapMListShowMore')]",
+                    "//div[contains(@class, 'sapMITB')]"
+                ]
+                
+                for indicator in alternative_indicators:
+                    elements = self.driver.find_elements(By.XPATH, indicator)
+                    if elements and any(e.is_displayed() for e in elements):
+                        logger.info(f"Indicador alternativo de carga detectado: {indicator}")
+                        time.sleep(2)  # Espera adicional para estabilización
+                        return True
+                
+                return False
+                
         except Exception as e:
-            logger.error(f"Error al hacer clic en botón de búsqueda: {e}")
+            logger.error(f"Error al esperar resultados de búsqueda: {e}")
             return False
+
+
+
+
+
+
+
+
+
+
+    def click_settings_button(self):
+        """
+        Hace clic en el botón de engranaje (⚙️) que aparece en la interfaz y verifica
+        que el panel de ajustes se abra correctamente.
+        
+        Este método implementa múltiples estrategias para localizar y hacer clic en el botón,
+        y luego verifica que el panel de ajustes se haya abierto correctamente.
+        
+        Returns:
+            bool: True si el clic fue exitoso y se abrió el panel, False en caso contrario
+        """
+        try:
+            logger.info("Intentando hacer clic en el botón de ajustes (engranaje)...")
+            
+            # Esperar un momento para asegurar que la interfaz se ha cargado completamente
+            time.sleep(3)
+            
+            # 1. ESTRATEGIA: Selectores altamente específicos para el botón de engranaje
+            settings_selectors = [
+                # Por ID o clase
+                "//button[contains(@id, 'settings')]", 
+                "//button[contains(@id, 'sap-ui-settings')]",
+                "//button[contains(@class, 'sapMBtn') and contains(@id, 'settings')]",
+                "//span[contains(@id, 'settings')]/ancestor::button",
+                
+                # Por ícono
+                "//span[contains(@class, 'sapUiIcon') and contains(@data-sap-ui, 'setting')]/ancestor::button",
+                "//span[contains(@class, 'sapUiIcon') and contains(@data-sap-ui, 'action-settings')]/ancestor::button",
+                "//span[contains(@class, 'sapUiIcon') and @data-sap-ui='sap-icon://action-settings']/ancestor::button",
+                
+                # Por texto
+                "//button[contains(@title, 'Settings')]",
+                "//button[contains(@aria-label, 'Settings')]",
+                
+                # Por ubicación específica
+                "//footer//button[last()]",
+                "//div[contains(@class, 'sapMFooter')]//button",
+                "//div[contains(@class, 'sapMBarRight')]//button[last()]",
+                
+                # Específicos de la interfaz de Issues & Actions
+                "//div[contains(@class, 'sapMPage')]//button[last()]",
+                "//div[contains(@class, 'sapMShellHeader')]//button[last()]",
+                
+                # Selectores específicos para el botón en la esquina inferior
+                "//span[contains(@data-sap-ui, 'icon-action-settings')]/ancestor::button",
+                "//div[contains(@class, 'sapMFlexBox')]//button[contains(@id, 'settings')]",
+                "//div[contains(@class, 'sapMBarPH')]//button[last()]",
+                "//div[contains(@class, 'sapMBarContainer')]/div[contains(@class, 'sapMBarRight')]//button"
+            ]
+            
+            # Tomar captura de pantalla antes de intentar para análisis posterior
+            try:
+                pre_click_screenshot = os.path.join("logs", f"pre_settings_click_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                if not os.path.exists("logs"):
+                    os.makedirs("logs")
+                self.driver.save_screenshot(pre_click_screenshot)
+                logger.info(f"Captura previa al clic guardada en: {pre_click_screenshot}")
+            except:
+                pass
+            
+            # Probar cada selector e intentar hacer clic
+            for selector in settings_selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    for element in elements:
+                        if element.is_displayed() and element.is_enabled():
+                            # Hacer scroll para garantizar visibilidad
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                            time.sleep(0.5)
+                            
+                            # Intentar con tres clics para asegurar que uno funcione
+                            click_success = False
+                            
+                            # 1. Primero: JavaScript click (más confiable)
+                            try:
+                                logger.info(f"Encontrado botón de ajustes con selector: {selector}")
+                                self.driver.execute_script("arguments[0].click();", element)
+                                logger.info("Clic en botón de ajustes realizado con JavaScript")
+                                click_success = True
+                            except Exception as js_e:
+                                logger.debug(f"Error en clic con JavaScript: {js_e}")
+                            
+                            # Verificar si se abrió el diálogo después del primer intento
+                            if click_success and self._verify_settings_panel_opened():
+                                return True
+                            
+                            # 2. Segundo: Clic normal
+                            try:
+                                element.click()
+                                logger.info("Clic en botón de ajustes realizado con método normal")
+                                click_success = True
+                            except Exception as normal_click_e:
+                                logger.debug(f"Error en clic normal: {normal_click_e}")
+                            
+                            # Verificar si se abrió el diálogo después del segundo intento
+                            if click_success and self._verify_settings_panel_opened():
+                                return True
+                            
+                            # 3. Tercero: Action Chains (más preciso)
+                            try:
+                                from selenium.webdriver.common.action_chains import ActionChains
+                                actions = ActionChains(self.driver)
+                                actions.move_to_element(element).click().perform()
+                                logger.info("Clic en botón de ajustes realizado con Action Chains")
+                                click_success = True
+                            except Exception as action_e:
+                                logger.debug(f"Error en clic con Action Chains: {action_e}")
+                            
+                            # Verificar si se abrió el diálogo después del tercer intento
+                            if click_success and self._verify_settings_panel_opened():
+                                return True
+                except Exception as selector_e:
+                    logger.debug(f"Error con selector {selector}: {selector_e}")
+                    continue
+            
+            # 2. ESTRATEGIA: Búsqueda por posición específica en la pantalla
+            logger.info("Intentando encontrar botón de ajustes por posición en la pantalla...")
+            try:
+                # Script para encontrar botones en la esquina inferior derecha
+                position_script = """
+                (function() {
+                    // Buscar botones en la esquina inferior
+                    var allButtons = Array.from(document.querySelectorAll('button'));
+                    var viewportHeight = window.innerHeight;
+                    var viewportWidth = window.innerWidth;
+                    
+                    // Buscar botones en la parte inferior de la pantalla
+                    var bottomButtons = allButtons.filter(function(btn) {
+                        if (!btn.offsetParent) return false; // No visible
+                        var rect = btn.getBoundingClientRect();
+                        
+                        // Botones en la parte inferior de la pantalla
+                        return rect.top > (viewportHeight * 0.7) && 
+                            rect.bottom <= viewportHeight;
+                    });
+                    
+                    // Ordenar por posición (de derecha a izquierda)
+                    bottomButtons.sort(function(a, b) {
+                        var rectA = a.getBoundingClientRect();
+                        var rectB = b.getBoundingClientRect();
+                        return rectB.right - rectA.right; // Primero los de la derecha
+                    });
+                    
+                    // Imprimir información para debugging
+                    console.log("Botones en la parte inferior: " + bottomButtons.length);
+                    
+                    // Hacer clic en el primer botón (más a la derecha)
+                    if (bottomButtons.length > 0) {
+                        bottomButtons[0].click();
+                        return true;
+                    }
+                    
+                    return false;
+                })();
+                """
+                
+                result = self.driver.execute_script(position_script)
+                if result:
+                    logger.info("Clic realizado en botón mediante posición en pantalla")
+                    time.sleep(2)
+                    if self._verify_settings_panel_opened():
+                        return True
+            except Exception as pos_e:
+                logger.debug(f"Error en estrategia de posición: {pos_e}")
+            
+            # 3. ESTRATEGIA: Atajos de teclado - SAP UI5 suele responder a Alt+O para opciones
+            logger.info("Intentando abrir ajustes con atajos de teclado...")
+            try:
+                body = self.driver.find_element(By.TAG_NAME, "body")
+                
+                # Secuencia Alt+O (común para opciones en SAP)
+                from selenium.webdriver.common.keys import Keys
+                from selenium.webdriver.common.action_chains import ActionChains
+                
+                actions = ActionChains(self.driver)
+                # Presionar Alt+O
+                actions.key_down(Keys.ALT).send_keys('o').key_up(Keys.ALT).perform()
+                logger.info("Enviada secuencia Alt+O para abrir opciones")
+                time.sleep(2)
+                
+                if self._verify_settings_panel_opened():
+                    return True
+                    
+                # Intentar con otras combinaciones comunes para abrir menús de opciones
+                actions = ActionChains(self.driver)
+                # Ctrl+,
+                actions.key_down(Keys.CONTROL).send_keys(',').key_up(Keys.CONTROL).perform()
+                logger.info("Enviada secuencia Ctrl+, para abrir opciones")
+                time.sleep(2)
+                
+                if self._verify_settings_panel_opened():
+                    return True
+            except Exception as key_e:
+                logger.debug(f"Error en estrategia de atajos de teclado: {key_e}")
+            
+            # 4. ESTRATEGIA: Si todo lo demás falló, hacer clic en cada botón visible del footer
+            logger.info("Estrategia final: intentando con todos los botones del footer...")
+            try:
+                footer_buttons = self.driver.find_elements(By.XPATH, 
+                    "//div[contains(@class, 'sapMFooter')]//button | //footer//button")
+                
+                for btn in footer_buttons:
+                    if btn.is_displayed() and btn.is_enabled():
+                        try:
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", btn)
+                            time.sleep(0.5)
+                            self.driver.execute_script("arguments[0].click();", btn)
+                            logger.info(f"Clic en botón del footer ({btn.text or 'sin texto'})")
+                            time.sleep(2)
+                            
+                            if self._verify_settings_panel_opened():
+                                return True
+                        except:
+                            continue
+            except Exception as footer_e:
+                logger.debug(f"Error en estrategia de botones del footer: {footer_e}")
+            
+            # 5. ESTRATEGIA: Último recurso - tomar captura de pantalla para análisis
+            try:
+                screenshot_path = os.path.join("logs", f"settings_button_debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                if not os.path.exists("logs"):
+                    os.makedirs("logs")
+                    
+                self.driver.save_screenshot(screenshot_path)
+                logger.info(f"Captura de pantalla guardada en: {screenshot_path}")
+                logger.error("No se pudo encontrar o hacer clic en el botón de ajustes. Revise la captura de pantalla para análisis manual.")
+            except Exception as ss_e:
+                logger.debug(f"Error al tomar captura de pantalla: {ss_e}")
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error general al intentar hacer clic en botón de ajustes: {e}")
+            return False
+
+
             
     def navigate_to_issues_tab(self):
         """
@@ -1991,6 +2414,271 @@ class SAPBrowser:
         
         
         
+        
+        
+        
+        
+        
+        
+    def _verify_settings_panel_opened(self):
+        """
+        Verifica si el panel de ajustes se ha abierto correctamente después de hacer clic en el botón.
+        
+        Returns:
+            bool: True si el panel está abierto, False en caso contrario
+        """
+        try:
+            # Esperamos un momento para que se abra el panel si es necesario
+            time.sleep(1)
+            
+            # Selectores para detectar el panel de ajustes
+            settings_panel_selectors = [
+                # Diálogos y popups
+                "//div[contains(@class, 'sapMDialog') and contains(@class, 'sapMPopup-CTX')]",
+                "//div[contains(@class, 'sapMPopover') and contains(@class, 'sapMPopup-CTX')]",
+                "//div[contains(@class, 'sapMActionSheet') and contains(@style, 'visibility: visible')]",
+                
+                # Contenido de ajustes
+                "//div[contains(@class, 'sapMDialog')]//div[contains(text(), 'Settings')]",
+                "//div[contains(@class, 'sapMPopover')]//div[contains(text(), 'Settings')]",
+                "//div[contains(text(), 'Settings')]/ancestor::div[contains(@class, 'sapMPopup-CTX')]",
+                
+                # Elementos específicos de configuración
+                "//ul[contains(@class, 'sapMListItems')]//li[contains(@class, 'sapMLIB-CTX')]",
+                "//div[contains(@class, 'sapMPopover')]//ul[contains(@class, 'sapMList')]",
+                "//div[contains(@class, 'sapMPopup-CTX')]//ul[contains(@class, 'sapMList')]"
+            ]
+            
+            # Verificar cada selector
+            for selector in settings_panel_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                if elements and any(element.is_displayed() for element in elements):
+                    logger.info(f"Panel de ajustes detectado con selector: {selector}")
+                    
+                    # Tomar captura del panel abierto para verificación
+                    try:
+                        panel_screenshot = os.path.join("logs", f"settings_panel_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                        if not os.path.exists("logs"):
+                            os.makedirs("logs")
+                        self.driver.save_screenshot(panel_screenshot)
+                        logger.info(f"Captura del panel de ajustes guardada en: {panel_screenshot}")
+                    except:
+                        pass
+                        
+                    return True
+            
+            # Verificación adicional con JavaScript para elementos emergentes
+            js_check = """
+            return (function() {
+                // Verificar diálogos y popovers visibles
+                var popups = document.querySelectorAll('.sapMDialog, .sapMPopover, .sapMActionSheet');
+                for (var i = 0; i < popups.length; i++) {
+                    var popup = popups[i];
+                    var style = window.getComputedStyle(popup);
+                    if (style.visibility === 'visible' || style.display !== 'none') {
+                        return true;
+                    }
+                }
+                
+                // Verificar cambios en la interfaz que indiquen que se abrió un panel
+                var newElements = document.querySelectorAll('.sapMDialog, .sapMPopover');
+                if (newElements.length > 0) {
+                    return true;
+                }
+                
+                return false;
+            })();
+            """
+            
+            js_result = self.driver.execute_script(js_check)
+            if js_result:
+                logger.info("Panel de ajustes detectado mediante JavaScript")
+                return True
+            
+            logger.warning("No se detectó el panel de ajustes después del clic")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al verificar si el panel de ajustes se abrió: {e}")
+            return False
+        
+        
+
+
+
+
+
+
+
+    def force_open_settings(self):
+        """
+        Método agresivo para forzar la apertura del panel de ajustes cuando los métodos
+        convencionales fallan. Realiza múltiples acciones de manera secuencial.
+        
+        Returns:
+            bool: True si se logró abrir el panel de ajustes, False en caso contrario
+        """
+        try:
+            logger.info("Iniciando método agresivo para abrir panel de ajustes...")
+            
+            # 1. Identificar todos los botones en la esquina inferior derecha
+            script_identify_buttons = """
+            return (function() {
+                // Todos los botones visibles
+                var allButtons = Array.from(document.querySelectorAll('button')).filter(function(btn) {
+                    return btn.offsetParent !== null; // Elemento visible
+                });
+                
+                // Información sobre los botones
+                var buttonInfo = allButtons.map(function(btn) {
+                    var rect = btn.getBoundingClientRect();
+                    return {
+                        id: btn.id || "",
+                        classes: btn.className || "",
+                        text: btn.textContent || "",
+                        x: rect.left,
+                        y: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                        bottomRight: rect.right >= (window.innerWidth * 0.7) && rect.bottom >= (window.innerHeight * 0.7)
+                    };
+                });
+                
+                return buttonInfo;
+            })();
+            """
+            
+            button_info = self.driver.execute_script(script_identify_buttons)
+            logger.info(f"Se identificaron {len(button_info)} botones en la página")
+            
+            # Guardar captura de pantalla para análisis
+            try:
+                screenshot_path = os.path.join("logs", f"before_force_open_settings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                if not os.path.exists("logs"):
+                    os.makedirs("logs")
+                self.driver.save_screenshot(screenshot_path)
+            except:
+                pass
+            
+            # 2. Ordenar los botones: primero los de la esquina inferior derecha, luego por ID o clase
+            def button_priority(btn_info):
+                # Mayor prioridad: botones en esquina inferior derecha
+                if btn_info.get('bottomRight', False):
+                    return 3
+                # Prioridad media: botones con "settings" en id o clase
+                elif 'settings' in btn_info.get('id', '').lower() or 'settings' in btn_info.get('classes', '').lower():
+                    return 2
+                # Prioridad baja: últimos botones en la interfaz
+                else:
+                    return 1
+                    
+            # Ordenar por prioridad
+            sorted_buttons = sorted(
+                button_info, 
+                key=button_priority,
+                reverse=True  # Mayor prioridad primero
+            )
+            
+            # 3. Intentar hacer clic en cada botón prioritario
+            clicks_attempted = 0
+            for i, btn_info in enumerate(sorted_buttons[:5]):  # Limitar a los 5 más probables
+                try:
+                    # Construir un XPath único para este botón
+                    xpath = f"//button"
+                    
+                    # Añadir ID si existe
+                    if btn_info.get('id'):
+                        xpath = f"//button[@id='{btn_info['id']}']"
+                    # Añadir clase si existe
+                    elif btn_info.get('classes'):
+                        class_list = btn_info['classes'].split()
+                        if class_list:
+                            xpath = f"//button[contains(@class, '{class_list[0]}')]"
+                    
+                    # Intentar encontrar el botón
+                    buttons = self.driver.find_elements(By.XPATH, xpath)
+                    if not buttons:
+                        continue
+                        
+                    # Hacer clic en el botón
+                    button = buttons[0]
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                    time.sleep(0.5)
+                    
+                    logger.info(f"Intentando clic en botón #{i+1}: ID='{btn_info.get('id', '')}', Classes='{btn_info.get('classes', '')}'")
+                    
+                    # Usar JavaScript para el clic
+                    self.driver.execute_script("arguments[0].click();", button)
+                    clicks_attempted += 1
+                    
+                    # Esperar a ver si se abre algún panel
+                    time.sleep(2)
+                    
+                    # Verificar si se abrió algún panel de ajustes
+                    if self._verify_settings_panel_opened():
+                        logger.info(f"¡Éxito! Panel de ajustes abierto después de {clicks_attempted} intentos")
+                        return True
+                        
+                except Exception as btn_e:
+                    logger.debug(f"Error al hacer clic en botón #{i+1}: {btn_e}")
+                    continue
+            
+            # 4. Si no funcionó, intentar con teclas de acceso rápido comunes en SAP
+            common_shortcuts = [
+                # Combinación de teclas, Descripción
+                ((Keys.ALT, 's'), "Alt+S (Settings)"),
+                ((Keys.ALT, 'o'), "Alt+O (Options)"),
+                ((Keys.CONTROL, 's'), "Ctrl+S (Settings)"),
+                ((Keys.CONTROL, 'o'), "Ctrl+O (Options)"),
+                ((Keys.CONTROL, ','), "Ctrl+, (Preferences)")
+            ]
+            
+            for shortcut, description in common_shortcuts:
+                try:
+                    logger.info(f"Intentando atajo de teclado: {description}")
+                    actions = ActionChains(self.driver)
+                    
+                    # Presionar las teclas modificadoras
+                    if shortcut[0] == Keys.CONTROL:
+                        actions.key_down(Keys.CONTROL)
+                    elif shortcut[0] == Keys.ALT:
+                        actions.key_down(Keys.ALT)
+                    
+                    # Presionar la tecla principal
+                    actions.send_keys(shortcut[1])
+                    
+                    # Liberar modificadores
+                    if shortcut[0] == Keys.CONTROL:
+                        actions.key_up(Keys.CONTROL)
+                    elif shortcut[0] == Keys.ALT:
+                        actions.key_up(Keys.ALT)
+                    
+                    # Ejecutar secuencia
+                    actions.perform()
+                    time.sleep(2)
+                    
+                    # Verificar si se abrió el panel
+                    if self._verify_settings_panel_opened():
+                        logger.info(f"¡Éxito! Panel de ajustes abierto con atajo {description}")
+                        return True
+                except Exception as shortcut_e:
+                    logger.debug(f"Error con atajo {description}: {shortcut_e}")
+                    continue
+            
+            # Si llegamos aquí, todos los intentos fallaron
+            logger.warning("No se pudo abrir el panel de ajustes con ningún método")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error general en método agresivo para abrir ajustes: {e}")
+            return False
+
+
+
+
+
+
+
         
         
     def get_total_issues_count(self):
@@ -3418,63 +4106,675 @@ class SAPBrowser:
         
         return issue_data
 
+
+
+
+
+
+
+
+
+
+
     def verify_fields_have_expected_values(self, erp_number, project_id):
         """
-        Verifica si los campos ya contienen los valores esperados
+        Verifica si los campos ya contienen los valores esperados.
+        
+        Esta función analiza la interfaz actual para determinar si el cliente y proyecto
+        especificados ya están seleccionados, evitando interacciones innecesarias.
         
         Args:
             erp_number (str): Número ERP del cliente
             project_id (str): ID del proyecto
-            
+                
         Returns:
             bool: True si los campos tienen los valores esperados, False en caso contrario
         """
         try:
+            logger.info(f"Verificando si los campos ya contienen los valores esperados: Cliente {erp_number}, Proyecto {project_id}")
+            
+            # Indicadores de que estamos en la página correcta con los valores esperados
+            indicators_found = 0
+            
+            # 1. Verificar campos de entrada directamente
+            fields_verified = 0
+            
             # Verificar el campo de cliente
             customer_fields = self.driver.find_elements(
                 By.XPATH,
-                "//input[contains(@placeholder, 'Customer') or contains(@placeholder, 'cliente')]"
+                "//input[contains(@placeholder, 'Customer') or contains(@aria-label, 'Customer')]"
             )
             
             if customer_fields:
                 for field in customer_fields:
-                    current_value = field.get_attribute("value") or ""
-                    if erp_number in current_value:
-                        logger.info(f"Campo de cliente ya contiene '{erp_number}'")
-                        return True
+                    if field.is_displayed():
+                        current_value = field.get_attribute("value") or ""
+                        if erp_number in current_value:
+                            logger.info(f"✓ Campo de cliente contiene '{erp_number}'")
+                            fields_verified += 1
+                            break
             
-            # Verificar si hay texto visible con estos valores
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            if erp_number in page_text and project_id in page_text:
-                logger.info(f"La página ya contiene '{erp_number}' y '{project_id}'")
+            # Verificar el campo de proyecto
+            project_fields = self.driver.find_elements(
+                By.XPATH,
+                "//input[contains(@placeholder, 'Project') or contains(@aria-label, 'Project')]"
+            )
+            
+            if project_fields:
+                for field in project_fields:
+                    if field.is_displayed():
+                        current_value = field.get_attribute("value") or ""
+                        if project_id in current_value:
+                            logger.info(f"✓ Campo de proyecto contiene '{project_id}'")
+                            fields_verified += 1
+                            break
+            
+            # 2. Verificar texto visible en la página
+            try:
+                page_text = self.driver.find_element(By.TAG_NAME, "body").text
                 
-                # Verificar si estamos en la página correcta con los datos
-                issues_elements = self.driver.find_elements(
-                    By.XPATH, 
-                    "//div[contains(text(), 'Issues')]"
-                )
-                if issues_elements:
-                    logger.info("En la página correcta con datos cargados")
-                    return True
+                # Verificar ERP
+                if erp_number in page_text:
+                    logger.info(f"✓ ERP '{erp_number}' encontrado en el texto de la página")
+                    indicators_found += 1
                 
-            return False
+                # Verificar Project ID
+                if project_id in page_text:
+                    logger.info(f"✓ Project ID '{project_id}' encontrado en el texto de la página")
+                    indicators_found += 1
+            except Exception as text_e:
+                logger.debug(f"Error al verificar texto: {text_e}")
+            
+            # 3. Verificar si estamos en la página correcta con los datos
+            interface_indicators = [
+                "//div[contains(text(), 'Issues by Status')]",
+                "//div[contains(text(), 'Actions by Status')]",
+                "//div[contains(@class, 'sapMITBHead')]"  # Pestañas de navegación
+            ]
+            
+            for indicator in interface_indicators:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, indicator)
+                    if elements and any(e.is_displayed() for e in elements):
+                        logger.info(f"✓ Interfaz correcta detectada: {indicator}")
+                        indicators_found += 1
+                        break
+                except:
+                    continue
+            
+            # 4. Verificar mediante JavaScript para interfaces complejas
+            js_check = """
+            (function() {
+                // Verificar Cliente
+                var customerElements = document.querySelectorAll('*');
+                var foundClient = false;
+                var foundProject = false;
+                
+                for (var i = 0; i < customerElements.length; i++) {
+                    var el = customerElements[i];
+                    var text = el.textContent || '';
+                    
+                    // Buscar Cliente
+                    if (!foundClient && text.includes(arguments[0])) {
+                        foundClient = true;
+                    }
+                    
+                    // Buscar Proyecto
+                    if (!foundProject && text.includes(arguments[1])) {
+                        foundProject = true;
+                    }
+                    
+                    if (foundClient && foundProject) break;
+                }
+                
+                // Verificar estado de la interfaz
+                var hasAdvancedUI = document.querySelectorAll('.sapMITB, .sapMPanel').length > 5;
+                
+                return {
+                    clientFound: foundClient,
+                    projectFound: foundProject,
+                    hasAdvancedUI: hasAdvancedUI
+                };
+            })();
+            """
+            
+            try:
+                result = self.driver.execute_script(js_check, erp_number, project_id)
+                
+                if result.get('clientFound'):
+                    indicators_found += 1
+                
+                if result.get('projectFound'):
+                    indicators_found += 1
+                    
+                if result.get('hasAdvancedUI'):
+                    indicators_found += 1
+            except Exception as js_e:
+                logger.debug(f"Error en verificación JavaScript: {js_e}")
+            
+            # Determinar resultado final basado en los indicadores encontrados
+            if fields_verified >= 2:
+                # Si ambos campos tienen los valores correctos, es prueba directa
+                logger.info("✅ Valores esperados confirmados: campos contienen valores correctos")
+                return True
+            elif indicators_found >= 3:
+                # Al menos 3 indicadores indirectos encontrados
+                logger.info("✅ Valores esperados confirmados: suficientes indicadores encontrados")
+                return True
+            else:
+                logger.info("⚠️ No se pudieron confirmar valores esperados en los campos")
+                return False
+            
         except Exception as e:
-            logger.debug(f"Error al verificar campos: {e}")
+            logger.error(f"Error al verificar campos: {e}")
             return False
-            
-    def close(self):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def configure_table_columns(self):
         """
-        Cierra el navegador
+        Configura las columnas de la tabla seleccionando todas las disponibles.
+        Esta función debe llamarse después de abrir el panel de ajustes.
         
         Returns:
-            bool: True si se cerró correctamente, False en caso contrario
+            bool: True si la configuración fue exitosa, False en caso contrario
         """
-        if self.driver:
-            try:
-                self.driver.quit()
-                logger.info("Navegador cerrado correctamente")
-                return True
-            except Exception as e:
-                logger.error(f"Error al cerrar el navegador: {e}")
+        try:
+            logger.info("Configurando columnas de la tabla para maximizar extracción de datos...")
+            
+            # 1. Hacer clic en la pestaña "Select Columns" (tercer ícono)
+            if not self._click_select_columns_tab():
+                logger.error("No se pudo hacer clic en la pestaña 'Select Columns'")
                 return False
-        return True
+                
+            # 2. Marcar la opción "Select All"
+            if not self._click_select_all_checkbox():
+                logger.error("No se pudo marcar la opción 'Select All'")
+                return False
+                
+            # 3. Confirmar con OK
+            if not self._confirm_selection():
+                logger.error("No se pudo confirmar la selección con OK")
+                return False
+            
+            logger.info("✅ Configuración de columnas completada exitosamente")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error al configurar columnas de tabla: {e}")
+            return False
+
+    def select_all_visible_columns(self):
+        """
+        Proceso completo para seleccionar todas las columnas visibles:
+        1. Abre el panel de ajustes
+        2. Configura todas las columnas
+        
+        Returns:
+            bool: True si el proceso fue exitoso, False en caso contrario
+        """
+        try:
+            logger.info("Iniciando proceso de selección de todas las columnas visibles...")
+            
+            # 1. Verificar si ya estamos en el panel de ajustes
+            settings_open = self._verify_settings_panel_opened()
+            
+            # 2. Si no está abierto, abrir el panel de ajustes
+            if not settings_open:
+                logger.info("El panel de ajustes no está abierto, intentando abrir...")
+                if hasattr(self, 'click_settings_button') and callable(getattr(self, 'click_settings_button')):
+                    settings_open = self.click_settings_button()
+                    
+                    if not settings_open and hasattr(self, 'force_open_settings'):
+                        logger.info("Intentando método alternativo para abrir ajustes...")
+                        settings_open = self.force_open_settings()
+                        
+                if not settings_open:
+                    logger.error("No se pudo abrir el panel de ajustes")
+                    return False
+                    
+                # Esperar a que se abra completamente el panel
+                time.sleep(2)
+            
+            # 3. Configurar las columnas visibles
+            result = self.configure_table_columns()
+            
+            if result:
+                logger.info("✅ Proceso de selección de columnas completado exitosamente")
+            else:
+                logger.warning("❌ Proceso de selección de columnas fallido")
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error en proceso de selección de columnas: {e}")
+            return False
+
+    def _verify_settings_panel_opened(self):
+        """
+        Verifica si el panel de ajustes está abierto
+        
+        Returns:
+            bool: True si el panel está abierto, False en caso contrario
+        """
+        try:
+            # Esperamos un momento para que se cargue el panel si se acaba de abrir
+            time.sleep(1)
+            
+            # Selectores para el panel de ajustes
+            panel_selectors = [
+                "//div[contains(@class, 'sapMDialog') and contains(@class, 'sapMPopup-CTX')]",
+                "//div[contains(@class, 'sapMPopover') and contains(@class, 'sapMPopup-CTX')]",
+                "//div[contains(text(), 'View Settings')]/ancestor::div[contains(@class, 'sapMDialogTitle')]",
+                "//span[contains(text(), 'View Settings')]/ancestor::div[contains(@class, 'sapMDialog')]"
+            ]
+            
+            # Buscar el panel con los selectores
+            for selector in panel_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                if elements and any(element.is_displayed() for element in elements):
+                    logger.debug("Panel de ajustes detectado correctamente")
+                    return True
+            
+            # Verificación adicional con JavaScript
+            js_check = """
+            return (function() {
+                // Verificar diálogos visibles
+                var dialogs = document.querySelectorAll('.sapMDialog, .sapMPopover');
+                for (var i = 0; i < dialogs.length; i++) {
+                    if (dialogs[i].offsetParent !== null) {
+                        // Buscar título de configuración
+                        var titleElements = dialogs[i].querySelectorAll('.sapMDialogTitle, .sapMTitle');
+                        for (var j = 0; j < titleElements.length; j++) {
+                            if (titleElements[j].textContent.includes('Settings') || 
+                                titleElements[j].textContent.includes('View')) {
+                                return true;
+                            }
+                        }
+                        // Si hay algún diálogo visible con los íconos de columnas
+                        var columnIcons = dialogs[i].querySelectorAll('.sapMTBShrinkItem');
+                        if (columnIcons.length >= 3) { // Al menos 3 íconos
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            })();
+            """
+            
+            panel_detected = self.driver.execute_script(js_check)
+            if panel_detected:
+                logger.debug("Panel de ajustes detectado mediante JavaScript")
+                return True
+            
+            logger.debug("No se detectó panel de ajustes abierto")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al verificar panel de ajustes: {e}")
+            return False
+
+    def _click_select_columns_tab(self):
+        """
+        Hace clic en la pestaña "Select Columns" (tercer ícono)
+        
+        Returns:
+            bool: True si el clic fue exitoso, False en caso contrario
+        """
+        try:
+            logger.info("Intentando hacer clic en la pestaña 'Select Columns'...")
+            
+            # El tercer ícono suele corresponder a "Select Columns"
+            # Intentaremos varios selectores para localizarlo
+            
+            # 1. Verificar si hay íconos de navegación visibles
+            tab_selectors = [
+                # Por posición (tercer ícono)
+                "(//div[contains(@class, 'sapMDialogTitle')]/following-sibling::div//button)[3]",
+                "(//div[contains(@class, 'sapMSegBBtn')])[3]",
+                "(//div[contains(@class, 'sapMITBHead')]//div[contains(@class, 'sapMITBItem')])[3]",
+                
+                # Por ícono específico
+                "//span[contains(@data-sap-ui, 'column') or contains(@data-sap-ui, 'table')]/ancestor::button",
+                "//button[contains(@title, 'Column') or contains(@aria-label, 'Column')]",
+                
+                # Por contenedor específico
+                "//div[contains(@class, 'sapMSegBBtnSel')]/following-sibling::div[2]",
+                
+                # Específico para el ícono de columnas
+                "//span[contains(@class, 'sapUiIcon') and contains(@data-sap-ui, 'table-column')]/ancestor::button",
+                "//span[contains(@class, 'sapUiIcon') and contains(@data-sap-ui, 'column')]/ancestor::button"
+            ]
+            
+            # Intentar cada selector
+            for selector in tab_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed() and element.is_enabled():
+                        # Scroll para asegurar visibilidad
+                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                        time.sleep(0.5)
+                        
+                        # Intentar clic con JavaScript
+                        try:
+                            self.driver.execute_script("arguments[0].click();", element)
+                            logger.info("Clic en pestaña 'Select Columns' realizado con JavaScript")
+                            time.sleep(1)
+                            return True
+                        except Exception as js_e:
+                            logger.debug(f"Error en clic JavaScript: {js_e}")
+                            try:
+                                # Intentar clic normal
+                                element.click()
+                                logger.info("Clic en pestaña 'Select Columns' realizado con método normal")
+                                time.sleep(1)
+                                return True
+                            except Exception as click_e:
+                                logger.debug(f"Error en clic normal: {click_e}")
+            
+            # Si fallaron todos los selectores, intentar con JavaScript específico
+            js_click_column_tab = """
+            return (function() {
+                // Buscar el panel de ajustes
+                var dialogs = document.querySelectorAll('.sapMDialog, .sapMPopover');
+                
+                for (var i = 0; i < dialogs.length; i++) {
+                    if (dialogs[i].offsetParent === null) continue; // No visible
+                    
+                    // Buscar todos los botones en el diálogo
+                    var buttons = dialogs[i].querySelectorAll('button, .sapMSegBBtn');
+                    
+                    // Si hay al menos 3 botones, hacer clic en el tercero
+                    if (buttons.length >= 3) {
+                        buttons[2].click();
+                        return true;
+                    }
+                    
+                    // Buscar por ícono específico
+                    var columnIcons = dialogs[i].querySelectorAll('.sapUiIcon');
+                    for (var j = 0; j < columnIcons.length; j++) {
+                        var iconData = columnIcons[j].getAttribute('data-sap-ui') || '';
+                        if (iconData.includes('column') || iconData.includes('table')) {
+                            // Buscar botón padre
+                            var parentButton = columnIcons[j].closest('button') || 
+                                            columnIcons[j].closest('.sapMSegBBtn');
+                            if (parentButton) {
+                                parentButton.click();
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            })();
+            """
+            
+            result = self.driver.execute_script(js_click_column_tab)
+            if result:
+                logger.info("Clic en pestaña 'Select Columns' realizado con JavaScript específico")
+                time.sleep(1)
+                return True
+                
+            logger.warning("No se pudo hacer clic en la pestaña 'Select Columns'")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al hacer clic en pestaña 'Select Columns': {e}")
+            return False
+
+    def _click_select_all_checkbox(self):
+        """
+        Hace clic en la opción "Select All" para seleccionar todas las columnas
+        
+        Returns:
+            bool: True si el clic fue exitoso, False en caso contrario
+        """
+        try:
+            logger.info("Intentando hacer clic en 'Select All'...")
+            
+            # Esperar a que aparezca el panel de columnas
+            time.sleep(1)
+            
+            # Selectores para el checkbox "Select All"
+            select_all_selectors = [
+                # Por texto exacto
+                "//div[normalize-space(text())='Select All']/preceding-sibling::div//input[@type='checkbox']",
+                "//div[normalize-space(text())='Select All']/preceding-sibling::div",
+                "//span[normalize-space(text())='Select All']/preceding-sibling::span//input[@type='checkbox']",
+                
+                # Por texto aproximado
+                "//div[contains(text(), 'Select All')]/preceding-sibling::div",
+                "//span[contains(text(), 'Select All')]/preceding-sibling::span",
+                
+                # Por posición (primer checkbox en la lista)
+                "(//input[@type='checkbox'])[1]",
+                "(//div[contains(@class, 'sapMCb')])[1]",
+                
+                # Por clase específica del "Select All"
+                "//div[contains(@class, 'sapMCbLabel') and contains(text(), 'Select All')]/preceding-sibling::div",
+                "//div[contains(@class, 'SelectAll')]/input[@type='checkbox']"
+            ]
+            
+            # Intentar cada selector
+            for selector in select_all_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed():
+                        # Scroll para asegurar visibilidad
+                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                        time.sleep(0.5)
+                        
+                        # Intentar clic
+                        try:
+                            self.driver.execute_script("arguments[0].click();", element)
+                            logger.info("Clic en 'Select All' realizado con JavaScript")
+                            time.sleep(0.5)
+                            return True
+                        except Exception as js_e:
+                            logger.debug(f"Error en clic JavaScript: {js_e}")
+                            try:
+                                element.click()
+                                logger.info("Clic en 'Select All' realizado con método normal")
+                                time.sleep(0.5)
+                                return True
+                            except Exception as click_e:
+                                logger.debug(f"Error en clic normal: {click_e}")
+            
+            # Método alternativo usando JavaScript para buscar y hacer clic
+            js_click_select_all = """
+            return (function() {
+                // Buscar por texto
+                var selectAllText = document.evaluate(
+                    "//div[contains(text(), 'Select All')] | //span[contains(text(), 'Select All')]",
+                    document,
+                    null,
+                    XPathResult.FIRST_ORDERED_NODE_TYPE,
+                    null
+                ).singleNodeValue;
+                
+                if (selectAllText) {
+                    // Buscar el elemento checkbox asociado
+                    var checkbox = null;
+                    
+                    // Método 1: Buscar en el elemento hermano anterior
+                    var parent = selectAllText.parentElement;
+                    if (parent && parent.previousElementSibling) {
+                        checkbox = parent.previousElementSibling.querySelector('input[type="checkbox"]') ||
+                                parent.previousElementSibling;
+                    }
+                    
+                    // Método 2: Buscar por proximidad
+                    if (!checkbox) {
+                        checkbox = selectAllText.closest('.sapMCb') || 
+                                selectAllText.previousElementSibling;
+                    }
+                    
+                    // Si encontramos un elemento, hacer clic
+                    if (checkbox) {
+                        checkbox.click();
+                        return true;
+                    }
+                }
+                
+                // Estrategia alternativa: hacer clic en el primer checkbox de la lista
+                var checkboxes = document.querySelectorAll('input[type="checkbox"], .sapMCb');
+                if (checkboxes.length > 0) {
+                    checkboxes[0].click();
+                    return true;
+                }
+                
+                return false;
+            })();
+            """
+            
+            result = self.driver.execute_script(js_click_select_all)
+            if result:
+                logger.info("Clic en 'Select All' realizado con JavaScript específico")
+                time.sleep(0.5)
+                return True
+                
+            logger.warning("No se pudo hacer clic en 'Select All'")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al hacer clic en 'Select All': {e}")
+            return False
+
+    def _confirm_selection(self):
+        """
+        Confirma la selección haciendo clic en el botón OK o usando Ctrl+Enter
+        
+        Returns:
+            bool: True si la confirmación fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info("Intentando confirmar selección de columnas...")
+            
+            # Intentar primero con el botón OK
+            ok_button_selectors = [
+                "//button[contains(@class, 'sapMDialogOkButton') or contains(text(), 'OK')]",
+                "//div[contains(@class, 'sapMBarRight')]//button[contains(@class, 'sapMBtn') and (contains(text(), 'OK') or contains(@aria-label, 'OK'))]",
+                "//footer//button[contains(text(), 'OK')]",
+                "//button[@title='OK' or @aria-label='OK']",
+                "//div[contains(@class, 'sapMDialogFooter')]//button[contains(text(), 'OK')]"
+            ]
+            
+            # Intentar cada selector
+            for selector in ok_button_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed() and element.is_enabled():
+                        # Scroll para asegurar visibilidad
+                        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                        time.sleep(0.5)
+                        
+                        # Intentar clic
+                        try:
+                            self.driver.execute_script("arguments[0].click();", element)
+                            logger.info("Clic en botón 'OK' realizado con JavaScript")
+                            time.sleep(1)  # Esperar a que se procese la acción
+                            return True
+                        except Exception as js_e:
+                            logger.debug(f"Error en clic JavaScript: {js_e}")
+                            try:
+                                element.click()
+                                logger.info("Clic en botón 'OK' realizado con método normal")
+                                time.sleep(1)
+                                return True
+                            except Exception as click_e:
+                                logger.debug(f"Error en clic normal: {click_e}")
+            
+            # Si falló el clic en OK, intentar con Ctrl+Enter
+            logger.info("Intentando confirmar con Ctrl+Enter...")
+            try:
+                # Encontrar cualquier elemento enfocable dentro del diálogo
+                focusable_elements = self.driver.find_elements(By.XPATH, 
+                    "//div[contains(@class, 'sapMDialog')]//input | //div[contains(@class, 'sapMDialog')]//button")
+                
+                if focusable_elements:
+                    # Hacemos clic en el elemento para asegurar el foco
+                    focusable_elements[0].click()
+                    time.sleep(0.5)
+                    
+                    # Enviamos Ctrl+Enter
+                    actions = ActionChains(self.driver)
+                    actions.key_down(Keys.CONTROL).send_keys(Keys.RETURN).key_up(Keys.CONTROL).perform()
+                    logger.info("Combinación Ctrl+Enter enviada")
+                    time.sleep(1)
+                    return True
+                else:
+                    # Si no encontramos elementos, intentar en el cuerpo del diálogo
+                    dialog_body = self.driver.find_element(By.XPATH, "//div[contains(@class, 'sapMDialog')]")
+                    dialog_body.click()
+                    time.sleep(0.5)
+                    
+                    # Enviamos Ctrl+Enter
+                    actions = ActionChains(self.driver)
+                    actions.key_down(Keys.CONTROL).send_keys(Keys.RETURN).key_up(Keys.CONTROL).perform()
+                    logger.info("Combinación Ctrl+Enter enviada al cuerpo del diálogo")
+                    time.sleep(1)
+                    return True
+            except Exception as key_e:
+                logger.debug(f"Error al enviar Ctrl+Enter: {key_e}")
+            
+            # Último recurso: JavaScript para buscar y hacer clic en OK
+            js_click_ok = """
+            return (function() {
+                // Buscar todos los botones en diálogos
+                var dialogButtons = Array.from(document.querySelectorAll('.sapMDialog button, .sapMPopover button'))
+                    .filter(function(btn) {
+                        return btn.offsetParent !== null; // Visible
+                    });
+                
+                // Buscar específicamente botones con texto "OK"
+                var okButton = dialogButtons.find(function(btn) {
+                    return btn.textContent.trim() === 'OK' || 
+                        btn.getAttribute('aria-label') === 'OK' ||
+                        btn.getAttribute('title') === 'OK';
+                });
+                
+                if (okButton) {
+                    okButton.click();
+                    return true;
+                }
+                
+                // Si no encontramos botón OK, buscar botones en el pie de diálogo
+                var footerButtons = document.querySelectorAll('.sapMDialogFooter button, .sapMIBar button');
+                if (footerButtons.length > 0) {
+                    // El botón de confirmación suele ser el último
+                    footerButtons[footerButtons.length - 1].click();
+                    return true;
+                }
+                
+                return false;
+            })();
+            """
+            
+            result = self.driver.execute_script(js_click_ok)
+            if result:
+                logger.info("Clic en 'OK' realizado con JavaScript específico")
+                time.sleep(1)
+                return True
+                
+            logger.warning("No se pudo confirmar la selección de columnas")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error al confirmar selección: {e}")
+            return False
