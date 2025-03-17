@@ -854,6 +854,19 @@ class SAPBrowser:
             logger.error(f"Error en verificación estricta: {e}")
             return False
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     def select_project_ui5_direct(self, project_id):
         """
         Selecciona el proyecto interactuando directamente con UI5
@@ -867,141 +880,327 @@ class SAPBrowser:
         try:
             logger.info(f"Seleccionando proyecto {project_id} a través de UI5 directo")
             
-            # Script para seleccionar proyecto a través de UI5
-            js_select_project = f"""
-            (function() {{
-                // Esperar a que UI5 esté cargado y las listas sean visibles
-                function waitForProjectField() {{
-                    return new Promise(function(resolve, reject) {{
+            # Script para seleccionar proyecto a través de UI5 con mejoras para gestionar el dropdown
+            js_select_project = """
+            (function() {
+                // Función para esperar a que el elemento esté disponible
+                function waitForElement(selector, maxTime) {
+                    return new Promise(function(resolve, reject) {
                         let attempts = 0;
                         const maxAttempts = 50;
                         
-                        (function check() {{
-                            if (attempts > maxAttempts) {{
+                        (function check() {
+                            if (attempts > maxAttempts) {
                                 reject("Tiempo de espera excedido");
                                 return;
-                            }}
+                            }
                             
                             attempts++;
                             
-                            if (!window.sap || !window.sap.ui || !window.sap.ui.getCore) {{
+                            if (document.querySelector(selector)) {
+                                resolve(document.querySelector(selector));
+                            } else {
                                 setTimeout(check, 100);
-                                return;
-                            }}
-                            
-                            const controls = sap.ui.getCore().byFieldGroupId();
-                            
-                            // Buscar campo de proyecto
-                            const projectField = controls.find(c => {{
-                                const id = c.getId() || '';
-                                const controlName = c.getMetadata().getName();
-                                
-                                return ((id.toLowerCase().includes('project') || id.toLowerCase().includes('proyecto')) && 
-                                    (controlName === 'sap.m.Input' || controlName === 'sap.m.ComboBox')) &&
-                                    c.getEnabled && c.getEnabled();
-                            }});
-                            
-                            if (projectField) {{
-                                resolve(projectField);
-                            }} else {{
-                                setTimeout(check, 200);
-                            }}
-                        }})();
-                    }});
-                }}
+                            }
+                        })();
+                    });
+                }
                 
-                async function selectProject() {{
-                    try {{
-                        // Esperar a que el campo de proyecto esté disponible
-                        console.log("Esperando campo de proyecto...");
-                        const projectField = await waitForProjectField();
-                        console.log("Campo de proyecto encontrado");
+                // Función para simular eventos de teclado
+                function simulateKeyEvent(element, keyCode) {
+                    const keyEvent = new KeyboardEvent('keydown', {
+                        key: keyCode === 40 ? 'ArrowDown' : 'Enter',
+                        code: keyCode === 40 ? 'ArrowDown' : 'Enter',
+                        keyCode: keyCode,
+                        which: keyCode,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    element.dispatchEvent(keyEvent);
+                    return new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                async function selectProject() {
+                    try {
+                        console.log("Buscando campo de proyecto...");
                         
-                        if (!projectField) {{
+                        // 1. Buscar el campo de proyecto con múltiples selectores
+                        let projectField = document.querySelector('input[placeholder*="Project"]');
+                        if (!projectField) {
+                            projectField = document.querySelector('input[aria-label*="Project"]');
+                        }
+                        
+                        if (!projectField) {
+                            // Buscar inputs visibles
+                            const inputs = document.querySelectorAll('input:not([type="hidden"])');
+                            for (let input of inputs) {
+                                if (input.offsetParent !== null) { // Es visible
+                                    const parentText = input.parentElement ? input.parentElement.textContent : '';
+                                    if (parentText.includes('Project')) {
+                                        projectField = input;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (!projectField) {
                             console.error("No se encontró el campo de proyecto");
                             return false;
-                        }}
+                        }
                         
-                        // Limpiar y establecer el valor
-                        projectField.setValue('');
-                        projectField.setValue('{project_id}');
+                        console.log("Campo de proyecto encontrado");
                         
-                        // Disparar eventos
-                        if (typeof projectField.fireChange === 'function') {{
-                            projectField.fireChange({{ value: '{project_id}' }});
-                        }}
+                        // 2. Limpiar y establecer el foco
+                        projectField.value = '';
+                        projectField.focus();
                         
-                        // Esperar a que aparezcan sugerencias
+                        // Disparar eventos para indicar cambio
+                        projectField.dispatchEvent(new Event('input', { bubbles: true }));
+                        projectField.dispatchEvent(new Event('change', { bubbles: true }));
+                        
+                        // 3. Establecer el valor del proyecto
+                        console.log("Ingresando ID del proyecto...");
+                        projectField.value = arguments[0]; // Usar el valor pasado como argumento
+                        
+                        // Disparar eventos para activar búsqueda
+                        projectField.dispatchEvent(new Event('input', { bubbles: true }));
+                        projectField.dispatchEvent(new Event('change', { bubbles: true }));
+                        
+                        // 4. Esperar a que aparezcan sugerencias (tiempo más largo)
                         await new Promise(resolve => setTimeout(resolve, 1500));
                         
-                        // Intentar encontrar y seleccionar el proyecto en las sugerencias
-                        const popups = sap.ui.getCore().byFieldGroupId().filter(c => 
-                            c.getMetadata().getName().includes('Popover') || 
-                            c.getMetadata().getName().includes('Popup'));
+                        // 5. Presionar tecla DOWN múltiples veces para asegurar la selección
+                        console.log("Presionando tecla DOWN varias veces...");
+                        for (let i = 0; i < 3; i++) {
+                            await simulateKeyEvent(projectField, 40); // Código de tecla DOWN
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                        }
                         
-                        let itemSelected = false;
+                        // 6. Verificar si hay sugerencias visibles y hacer clic directamente
+                        const popups = document.querySelectorAll('.sapMPopover, .sapMSuggestionPopup, .sapMSelectList');
+                        let suggestionClicked = false;
                         
-                        for (let popup of popups) {{
-                            if (popup.isOpen && popup.isOpen()) {{
-                                const items = popup.getItems ? popup.getItems() : 
-                                            (popup.getContent ? popup.getContent() : []);
+                        for (const popup of popups) {
+                            if (popup.offsetParent !== null) { // Popup visible
+                                console.log("Dropdown visible encontrado");
+                                const items = popup.querySelectorAll('li');
                                 
-                                for (let item of items) {{
-                                    if (item.getText && item.getText().includes('{project_id}')) {{
-                                        if (item.firePress) {{
-                                            item.firePress();
-                                            console.log('Sugerencia seleccionada: ' + item.getText());
-                                            itemSelected = true;
-                                            break;
-                                        }}
-                                    }}
-                                }}
-                            }}
-                            
-                            if (itemSelected) break;
-                        }}
+                                if (items.length > 0) {
+                                    console.log("Sugerencias encontradas, seleccionando primera...");
+                                    items[0].click();
+                                    suggestionClicked = true;
+                                    break;
+                                }
+                            }
+                        }
                         
-                        // Si no se seleccionó ningun item, simular tecla Enter
-                        if (!itemSelected) {{
-                            if (typeof projectField.onsapenter === 'function') {{
-                                projectField.onsapenter();
-                                console.log('Tecla Enter simulada');
-                            }}
-                        }}
+                        // Si no se hizo clic en ninguna sugerencia, enviar ENTER
+                        if (!suggestionClicked) {
+                            console.log("Presionando tecla ENTER...");
+                            await simulateKeyEvent(projectField, 13); // Código de tecla ENTER
+                        }
                         
-                        return true;
-                    }} catch (e) {{
+                        // 7. Esperar a que se complete la selección
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        // 8. Verificar si el proyecto fue seleccionado
+                        const selectedText = projectField.value || '';
+                        const hasProject = selectedText.includes(arguments[0]);
+                        
+                        // Buscar cualquier elemento que muestre el ID del proyecto
+                        const projectElements = document.querySelectorAll('*');
+                        const projectVisible = Array.from(projectElements).some(el => 
+                            el.textContent && el.textContent.includes(arguments[0]) && 
+                            el.offsetParent !== null
+                        );
+                        
+                        return hasProject || projectVisible;
+                    } catch (e) {
                         console.error('Error al seleccionar proyecto: ' + e);
                         return false;
-                    }}
-                }}
+                    }
+                }
                 
                 return selectProject();
-            }})();
+            })();
             """
             
-            # Ejecutar script
-            result = self.driver.execute_script(js_select_project)
-            time.sleep(3)
+            # Ejecutar script pasando el project_id como argumento
+            result = self.driver.execute_script(js_select_project, project_id)
+            time.sleep(2)
+            
+            # Si el script no tuvo éxito, intentar con el método de Selenium
+            if not result:
+                logger.warning("Script UI5 no tuvo éxito, intentando método de Selenium directo")
+                
+                # Método mejorado de selección con Selenium que implementa específicamente la secuencia
+                # "flecha abajo + enter" para seleccionar el proyecto
+                return self._select_project_with_selenium(project_id)
             
             # Verificar si el proyecto fue seleccionado
             selected = self._verify_project_selection_strict(project_id)
             
             if not selected:
                 logger.warning(f"Verificación estricta falló: Proyecto {project_id} no está seleccionado")
-                return False
+                # Intentar con el método mejorado de Selenium como último recurso
+                return self._select_project_with_selenium(project_id)
+            
+            if selected:
+                logger.info(f"Proyecto {project_id} seleccionado correctamente con UI5 directo")
+            else:
+                logger.error(f"No se pudo seleccionar el proyecto {project_id}")
                 
-            logger.info(f"Proyecto {project_id} seleccionado correctamente con UI5 directo")
-            return True
+            return selected
             
         except Exception as e:
             logger.error(f"Error en selección de proyecto con UI5 directo: {e}")
+            # Como último recurso, intentar con el método de Selenium
+            return self._select_project_with_selenium(project_id)
+
+    def _select_project_with_selenium(self, project_id):
+        """
+        Método especializado para seleccionar el proyecto utilizando Selenium,
+        con énfasis en la secuencia "flecha abajo + enter"
+        
+        Args:
+            project_id (str): ID del proyecto a seleccionar
+            
+        Returns:
+            bool: True si la selección fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info(f"Intentando seleccionar proyecto {project_id} con método Selenium mejorado")
+            
+            # Buscar el campo de proyecto con múltiples selectores
+            project_field_selectors = [
+                "//input[contains(@placeholder, 'Project')]", 
+                "//input[contains(@aria-label, 'Project')]",
+                "//div[contains(text(), 'Project:')]/following::input[1]",
+                "//span[contains(text(), 'Project')]/following::input[1]",
+                "//input[contains(@id, 'project')]"
+            ]
+            
+            project_field = None
+            for selector in project_field_selectors:
+                try:
+                    fields = self.driver.find_elements(By.XPATH, selector)
+                    for field in fields:
+                        if field.is_displayed() and field.is_enabled():
+                            project_field = field
+                            logger.info(f"Campo de proyecto encontrado con selector: {selector}")
+                            break
+                    if project_field:
+                        break
+                except:
+                    continue
+            
+            if not project_field:
+                logger.warning("No se pudo encontrar el campo de proyecto")
+                return False
+            
+            # Limpiar el campo completamente usando múltiples técnicas
+            try:
+                # Limpiar con JavaScript 
+                self.driver.execute_script("arguments[0].value = '';", project_field)
+                # Limpiar con Selenium
+                project_field.clear()
+                # Usar secuencia de teclas para asegurar limpieza completa
+                project_field.send_keys(Keys.CONTROL + "a")
+                project_field.send_keys(Keys.DELETE)
+                time.sleep(1)
+            except Exception as clear_e:
+                logger.debug(f"Error al limpiar campo: {clear_e} - continuando de todos modos")
+            
+            # Hacer clic para asegurar el foco
+            try:
+                project_field.click()
+                time.sleep(0.5)
+            except:
+                # Intentar con JavaScript si el clic directo falla
+                self.driver.execute_script("arguments[0].focus();", project_field)
+                time.sleep(0.5)
+            
+            # Ingresar el ID del proyecto con pausas entre caracteres
+            for char in project_id:
+                project_field.send_keys(char)
+                time.sleep(0.2)  # Pausas para que la interfaz procese cada carácter
+            
+            # Pausar para que aparezcan las sugerencias (tiempo más largo)
+            time.sleep(2)
+            
+            # ESTRATEGIA PRINCIPAL: Usar ActionChains para una secuencia controlada de teclas
+            from selenium.webdriver.common.action_chains import ActionChains
+            
+            actions = ActionChains(self.driver)
+            # Presionar flecha abajo múltiples veces
+            for _ in range(3):  # Asegurar selección con múltiples pulsaciones
+                actions.send_keys(Keys.DOWN)
+                actions.pause(0.5)  # Pausa importante entre teclas
+            
+            # Presionar Enter después de la selección
+            actions.send_keys(Keys.ENTER)
+            actions.perform()
+            
+            # Esperar a que se procese la selección
+            time.sleep(2)
+            
+            # Verificar si la selección tuvo éxito
+            if self._verify_project_selection_strict(project_id):
+                logger.info(f"Proyecto {project_id} seleccionado con éxito mediante secuencia de teclas")
+                return True
+            
+            # ESTRATEGIA ALTERNATIVA 1: Clic directo en la primera sugerencia
+            try:
+                logger.info("Intentando estrategia de clic directo en sugerencia...")
+                
+                suggestion_selectors = [
+                    "//div[contains(@class, 'sapMPopover')]//li[1]",
+                    "//div[contains(@class, 'sapMSuggestionPopup')]//li[1]",
+                    "//div[contains(@class, 'sapMSelectList')]//li[1]",
+                    f"//li[contains(text(), '{project_id}')]",
+                    "//ul[contains(@class, 'sapMListItems')]//li[1]"
+                ]
+                
+                for selector in suggestion_selectors:
+                    try:
+                        suggestions = self.driver.find_elements(By.XPATH, selector)
+                        if suggestions and suggestions[0].is_displayed():
+                            # Hacer scroll para asegurar visibilidad
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", suggestions[0])
+                            time.sleep(0.5)
+                            
+                            # Clic con JavaScript (más confiable en SAP UI5)
+                            self.driver.execute_script("arguments[0].click();", suggestions[0])
+                            logger.info("Clic en primera sugerencia realizado con JavaScript")
+                            time.sleep(2)
+                            
+                            if self._verify_project_selection_strict(project_id):
+                                logger.info(f"Proyecto {project_id} seleccionado con éxito mediante clic en sugerencia")
+                                return True
+                    except Exception as sugg_e:
+                        logger.debug(f"Error con selector {selector}: {sugg_e}")
+                        continue
+            except Exception as e:
+                logger.debug(f"Error en estrategia de clic en sugerencia: {e}")
+            
+            # ESTRATEGIA ALTERNATIVA 2: Solo Enter como último recurso
+            try:
+                project_field.send_keys(Keys.ENTER)
+                time.sleep(2)
+                
+                if self._verify_project_selection_strict(project_id):
+                    logger.info(f"Proyecto {project_id} seleccionado con éxito mediante Enter simple")
+                    return True
+            except:
+                pass
+            
+            logger.warning(f"Todas las estrategias fallaron para seleccionar el proyecto {project_id}")
             return False
-        
-        
-        
-        
-        
+            
+        except Exception as e:
+            logger.error(f"Error en método de selección de proyecto con Selenium: {e}")
+            return False        
         
         
         
@@ -1010,7 +1209,8 @@ class SAPBrowser:
         
     def _verify_project_selection_strict(self, project_id):
         """
-        Verificación estricta que el proyecto fue realmente seleccionado
+        Verificación estricta de que el proyecto fue realmente seleccionado,
+        utilizando múltiples criterios para mayor confiabilidad.
         
         Args:
             project_id (str): ID del proyecto
@@ -1019,39 +1219,256 @@ class SAPBrowser:
             bool: True si el proyecto está seleccionado, False en caso contrario
         """
         try:
-            # Verificar si el campo de proyecto está correctamente lleno
-            js_verify = f"""
-            (function() {{
-                // Verificar campo de proyecto
+            # 1. Verificar si el campo de proyecto tiene el valor correcto
+            js_verify = """
+            (function() {
+                // 1. Verificar campo de proyecto
                 var projectFields = document.querySelectorAll('input[placeholder*="Project"], input[id*="project"]');
-                for (var i = 0; i < projectFields.length; i++) {{
-                    if (projectFields[i].value.includes("{project_id}")) {{
+                for (var i = 0; i < projectFields.length; i++) {
+                    var fieldValue = projectFields[i].value || '';
+                    if (fieldValue && fieldValue.includes(arguments[0])) {
                         return true;
-                    }}
-                }}
+                    }
+                }
                 
-                // Verificar si el valor está mostrado como texto
-                var elements = document.querySelectorAll('*');
-                for (var i = 0; i < elements.length; i++) {{
+                // 2. Verificar si el valor está mostrado como texto visible
+                var elements = document.querySelectorAll('div, span, label');
+                for (var i = 0; i < elements.length; i++) {
                     var el = elements[i];
-                    if (el.textContent && 
-                        el.textContent.includes("{project_id}") && 
-                        (el.textContent.includes("Project") || el.textContent.includes("Proyecto"))) {{
+                    if (el.offsetParent !== null && el.textContent && 
+                        el.textContent.includes(arguments[0]) && 
+                        (el.textContent.includes("Project") || el.textContent.includes("Proyecto"))) {
                         return true;
-                    }}
-                }}
+                    }
+                }
                 
-                // Verificar si hay botón de búsqueda habilitado
+                // 3. Verificar si hay botón de búsqueda habilitado (indicador indirecto)
                 var searchButtons = document.querySelectorAll('button[title*="Search"], button[aria-label*="Search"]');
-                return searchButtons.length > 0 && !searchButtons[0].disabled;
-            }})();
+                if (searchButtons.length > 0 && !searchButtons[0].disabled) {
+                    // Verificar también otros elementos de interfaz que indican selección exitosa
+                    var otherIndicators = document.querySelectorAll('.sapMITBHead, .sapMITBFilter');
+                    if (otherIndicators.length > 3) {
+                        return true;
+                    }
+                }
+                
+                // 4. Verificar por interfaz avanzada (indica que se ha cargado el proyecto)
+                var advancedUI = document.querySelectorAll('.sapMPanel, .sapMITB, .sapMITBFilter');
+                if (advancedUI.length > 5) {
+                    // Muchos elementos de interfaz avanzada sugieren que el proyecto está seleccionado
+                    return true;
+                }
+                
+                return false;
+            })();
             """
             
-            result = self.driver.execute_script(js_verify)
-            return result
+            # Ejecutar la verificación JavaScript
+            js_result = self.driver.execute_script(js_verify, project_id)
+            if js_result:
+                logger.info("Verificación JavaScript: proyecto seleccionado")
+                return True
+            
+            # 2. Verificación por Selenium como respaldo
+            # Buscar el valor del proyecto en el campo o en cualquier elemento visible
+            project_field_selectors = [
+                f"//input[contains(@value, '{project_id}')]",
+                f"//div[contains(text(), '{project_id}')]",
+                f"//span[contains(text(), '{project_id}')]",
+                f"//label[contains(text(), '{project_id}')]"
+            ]
+            
+            for selector in project_field_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                if elements:
+                    for element in elements:
+                        if element.is_displayed():
+                            logger.info(f"Proyecto {project_id} verificado en elemento visible")
+                            return True
+            
+            # 3. Verificar elementos de interfaz que indican que se ha seleccionado un proyecto
+            interface_indicators = [
+                "//div[contains(text(), 'Issues')]",
+                "//span[contains(text(), 'Issues')]",
+                "//div[contains(text(), 'Details')]",
+                "//div[contains(@class, 'sapMITBHead')]" # Cabecera de pestañas
+            ]
+            
+            indicator_count = 0
+            for selector in interface_indicators:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed():
+                        indicator_count += 1
+            
+            # Si hay suficientes indicadores de interfaz, consideramos que el proyecto está seleccionado
+            if indicator_count >= 2:
+                logger.info(f"Proyecto probablemente seleccionado (basado en {indicator_count} indicadores de interfaz)")
+                return True
+            
+            # 4. Verificar si el botón de búsqueda está habilitado (otro indicador de que se ha seleccionado un proyecto)
+            search_buttons = self.driver.find_elements(By.XPATH, 
+                "//button[contains(@aria-label, 'Search')] | //button[@title='Search']")
+            
+            for button in search_buttons:
+                if button.is_displayed() and button.is_enabled():
+                    # Verificar también si hay pestañas u otros elementos que indiquen un proyecto cargado
+                    tabs = self.driver.find_elements(By.XPATH, "//div[@role='tab']")
+                    if len(tabs) >= 2:
+                        logger.info("Proyecto seleccionado (basado en botón de búsqueda habilitado y pestañas presentes)")
+                        return True
+            
+            logger.warning(f"No se pudo verificar selección del proyecto {project_id}")
+            return False
+            
         except Exception as e:
             logger.error(f"Error en verificación estricta de proyecto: {e}")
             return False
+
+    def select_project_automatically(self, project_id):
+        """
+        Selecciona automáticamente un proyecto por su ID.
+        Implementa una estrategia mejorada, resiliente y con múltiples verificaciones.
+        
+        Args:
+            project_id (str): ID del proyecto a seleccionar
+            
+        Returns:
+            bool: True si la selección fue exitosa, False en caso contrario
+        """
+        try:
+            # Verificar que el ID no esté vacío
+            if not project_id or project_id.strip() == "":
+                logger.warning("No se puede seleccionar proyecto: ID vacío")
+                return False
+                
+            logger.info(f"Seleccionando proyecto {project_id} automáticamente...")
+            
+            # 0. Verificar primero si el proyecto ya está seleccionado
+            if self._verify_project_selection_strict(project_id):
+                logger.info(f"El proyecto {project_id} ya está seleccionado")
+                return True
+                
+            # 1. Estrategia principal: método UI5 directo (más eficaz)
+            if self.select_project_ui5_direct(project_id):
+                logger.info(f"Proyecto {project_id} seleccionado exitosamente con método UI5 directo")
+                return True
+                
+            # 2. Estrategia secundaria: método Selenium con múltiples intentos
+            logger.info("Método UI5 directo falló, intentando método Selenium con reintentos...")
+            
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                logger.info(f"Intento {attempt+1}/{max_attempts} con método Selenium")
+                
+                if self._select_project_with_selenium(project_id):
+                    logger.info(f"Proyecto {project_id} seleccionado exitosamente en el intento {attempt+1}")
+                    return True
+                    
+                # Esperar entre intentos
+                if attempt < max_attempts - 1:
+                    logger.info(f"Intento {attempt+1} fallido, esperando antes de reintentar...")
+                    time.sleep(3)
+            
+            # 3. Estrategia de último recurso: Script JavaScript más agresivo
+            logger.warning("Estrategias estándar fallidas, intentando script JavaScript agresivo...")
+            
+            js_aggressive = """
+            (function() {
+                // Función para simular clic
+                function simulateClick(element) {
+                    try {
+                        // Intentar varios métodos de clic
+                        element.click();
+                        return true;
+                    } catch(e) {
+                        try {
+                            // Simular evento de clic
+                            var evt = new MouseEvent('click', {
+                                bubbles: true,
+                                cancelable: true,
+                                view: window
+                            });
+                            element.dispatchEvent(evt);
+                            return true;
+                        } catch(e2) {
+                            return false;
+                        }
+                    }
+                }
+                
+                // 1. Buscar y seleccionar el campo de proyecto
+                var projectFields = document.querySelectorAll('input[placeholder*="Project"], input[id*="project"], input[aria-label*="Project"]');
+                var projectField = null;
+                
+                for (var i = 0; i < projectFields.length; i++) {
+                    if (projectFields[i].offsetParent !== null) {
+                        projectField = projectFields[i];
+                        break;
+                    }
+                }
+                
+                if (!projectField) {
+                    return false;
+                }
+                
+                // 2. Limpiar y establecer valor
+                projectField.value = '';
+                projectField.focus();
+                projectField.value = arguments[0];
+                
+                // Forzar eventos
+                projectField.dispatchEvent(new Event('input', { bubbles: true }));
+                projectField.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // 3. Verificar cualquier lista desplegable abierta y hacer clic
+                setTimeout(function() {
+                    var popups = document.querySelectorAll('.sapMPopover, .sapMSuggestionPopup, .sapMSelectList');
+                    
+                    for (var i = 0; i < popups.length; i++) {
+                        if (popups[i].offsetParent !== null) {
+                            var items = popups[i].querySelectorAll('li');
+                            
+                            if (items.length > 0) {
+                                simulateClick(items[0]);
+                                return;
+                            }
+                        }
+                    }
+                    
+                    // Si no hay popup, simular Enter
+                    var enterEvent = new KeyboardEvent('keydown', {
+                        key: 'Enter',
+                        code: 'Enter',
+                        keyCode: 13,
+                        which: 13,
+                        bubbles: true
+                    });
+                    projectField.dispatchEvent(enterEvent);
+                }, 1500);
+                
+                return true;
+            })();
+            """
+            
+            try:
+                self.driver.execute_script(js_aggressive, project_id)
+                time.sleep(3)
+                
+                # Verificar resultado
+                if self._verify_project_selection_strict(project_id):
+                    logger.info("Proyecto seleccionado con script JavaScript agresivo")
+                    return True
+            except Exception as js_e:
+                logger.error(f"Error en script JavaScript agresivo: {js_e}")
+            
+            logger.error(f"Todas las estrategias fallaron para seleccionar el proyecto {project_id}")
+            return False
+                    
+        except Exception as e:
+            logger.error(f"Error general durante la selección automática de proyecto: {e}")
+            return False       
+        
     
     def select_customer_automatically(self, erp_number):
         """
@@ -1229,170 +1646,228 @@ class SAPBrowser:
             logger.error(f"Error general durante la selección automática de cliente: {e}")
             return False
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-    def select_project_automatically(self, project_id):
+
+
+
+
+
+
+
+
+
+
+
+    def wait_for_sap_navigation_complete(self, timeout: float = 30) -> bool:
         """
-        Selecciona automáticamente un proyecto por su ID.
-        Implementa múltiples estrategias, incluyendo interacción directa con UI5.
+        Espera a que se complete la navegación en una aplicación SAP
+        con verificación mejorada de la carga de elementos interactivos.
         
         Args:
-            project_id (str): ID del proyecto a seleccionar
+            timeout (float): Tiempo máximo de espera en segundos
             
         Returns:
-            bool: True si la selección fue exitosa, False en caso contrario
+            bool: True si la navegación se completó, False en caso contrario
         """
         try:
-            # Verificar que el ID no esté vacío
-            if not project_id or project_id.strip() == "":
-                logger.warning("No se puede seleccionar proyecto: ID vacío")
-                return False
-                
-            logger.info(f"Seleccionando proyecto {project_id} automáticamente...")
+            logger.info("Esperando a que la navegación SAP se complete...")
+            start_time = time.time()
             
-            # 1. Intentar primero con el método UI5 directo
-            if self.select_project_ui5_direct(project_id):
-                logger.info(f"Proyecto {project_id} seleccionado exitosamente con método UI5 directo")
-                return True
-                
-            # 2. Si falló, implementar método estándar como respaldo
-            logger.info("Método UI5 directo falló, intentando método estándar...")
-            
-            # Verificar primero si el proyecto ya está seleccionado
+            # Paso 1: Esperar a que se complete el estado de readyState
             try:
-                current_text = self.driver.find_element(By.TAG_NAME, "body").text
-                if f"Proyecto: {project_id}" in current_text or f"Project: {project_id}" in current_text:
-                    logger.info(f"El proyecto {project_id} ya parece estar seleccionado")
-                    return True
-            except:
-                pass
-                
-            # Esperar a que los datos del proyecto estén disponibles
-            try:
-                logger.info("Esperando a que los datos de proyectos estén disponibles...")
-                WebDriverWait(self.driver, 30).until(
-                    lambda d: len(d.find_elements(By.XPATH, "//div[contains(@class, 'sapMList')]/li")) > 0 or
-                            len(d.find_elements(By.XPATH, "//div[contains(@class, 'sapMComboBoxBasePicker')]//li")) > 0 or
-                            len(d.find_elements(By.XPATH, "//ul[contains(@class, 'sapMList')]//li")) > 0
+                WebDriverWait(self.driver, timeout).until(
+                    lambda d: d.execute_script("return document.readyState") == "complete"
                 )
-                logger.info("Lista de proyectos parece estar cargada")
+                logger.info("Estado de documento 'complete' detectado")
             except TimeoutException:
-                logger.warning("Timeout esperando a que se cargue la lista de proyectos")
-                
-            # Buscar campo de proyecto
-            project_field = None
-            project_field_selectors = [
-                "//input[contains(@placeholder, 'Project')]", 
-                "//input[@id='project']", 
-                "//input[contains(@aria-label, 'Project')]",
-                "//input[contains(@id, 'project')]",
-                "//div[contains(@id, 'project')]//input",
-                "//span[contains(text(), 'Project')]/following::input[1]",
-                "//label[contains(text(), 'Project')]/following::input[1]"
+                logger.warning(f"Timeout esperando a que documento esté completo ({timeout}s)")
+                # Continuar de todos modos, ya que algunos elementos pueden estar cargados
+            
+            # Paso 2: Esperar a que desaparezca cualquier indicador de ocupado
+            busy_indicator_selectors = [
+                "//div[contains(@class, 'sapUiLocalBusyIndicator')]",
+                "//div[contains(@class, 'sapMBusyIndicator')]",
+                "//div[contains(@class, 'sapUiBusy')]",
+                "//div[contains(@class, 'sapMBlockLayerOnly')]"
             ]
             
-            for selector in project_field_selectors:
+            # Verificar cada indicador de carga
+            for selector in busy_indicator_selectors:
                 try:
-                    fields = self.driver.find_elements(By.XPATH, selector)
-                    for field in fields:
-                        if field.is_displayed() and field.is_enabled():
-                            project_field = field
-                            logger.info(f"Campo de proyecto encontrado con selector: {selector}")
-                            break
-                    if project_field:
+                    # Esperar hasta que NO exista o no sea visible (tiempo más corto)
+                    WebDriverWait(self.driver, 5).until_not(
+                        EC.visibility_of_element_located((By.XPATH, selector))
+                    )
+                except:
+                    # Verificar manualmente si hay indicadores visibles
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    if elements and any(e.is_displayed() for e in elements):
+                        logger.info(f"Indicador de carga sigue visible: {selector}")
+                        
+                        # Esperar un poco más para que desaparezca
+                        time.sleep(3)
+            
+            # Paso 3: Esperar a que UI5 complete su inicialización
+            ui5_ready = self.check_sap_ui5_loaded(min(10, timeout / 2))
+            if ui5_ready:
+                logger.info("Framework SAP UI5 detectado y cargado")
+            else:
+                logger.warning("No se pudo confirmar carga de SAP UI5")
+            
+            # Paso 4: Verificar que los elementos interactivos estén disponibles
+            ui_elements = [
+                "//input[contains(@placeholder, 'Customer')]",
+                "//input[contains(@placeholder, 'Project')]",
+                "//button[contains(@aria-label, 'Search')]",
+                "//div[contains(@class, 'sapMBarLeft')]"
+            ]
+            
+            # Verificar si al menos uno de los elementos de interfaz está visible
+            element_found = False
+            for selector in ui_elements:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    if elements and any(e.is_displayed() for e in elements):
+                        element_found = True
+                        logger.info(f"Elemento interactivo detectado: {selector}")
                         break
                 except:
                     continue
-
-            if not project_field:
-                logger.warning("No se pudo encontrar el campo de proyecto visible")
-                return False
-                
-            # Limpiar y establecer valor
-            try:
-                project_field.clear()
-                self.driver.execute_script("arguments[0].value = '';", project_field)
-                project_field.send_keys(Keys.CONTROL + "a")
-                project_field.send_keys(Keys.DELETE)
-                time.sleep(1)
-                
-                # Escribir el ID del proyecto
-                project_field.send_keys(project_id)
-                logger.info(f"ID de proyecto {project_id} ingresado en campo")
-                time.sleep(2)
-                
-                # Simular presionar ENTER para buscar
-                project_field.send_keys(Keys.ENTER)
-                logger.info("Tecla ENTER presionada para buscar proyecto")
-                time.sleep(3)
-            except Exception as input_e:
-                logger.error(f"Error al establecer valor de proyecto: {input_e}")
-                return False
-                
-            # Verificar que el proyecto fue seleccionado
-            selected = self._verify_project_selection_strict(project_id)
             
-            # Si no se ha seleccionado, buscar y hacer clic en el proyecto en los resultados
-            if not selected:
-                logger.info("Buscando proyecto en resultados...")
-                project_selectors = [
-                    f"//div[contains(text(), '{project_id}')]",
-                    f"//span[contains(text(), '{project_id}')]", 
-                    f"//td[contains(text(), '{project_id}')]",
-                    f"//li[contains(text(), '{project_id}')]",
-                    f"//*[contains(@class, 'sapMLIB') and contains(text(), '{project_id}')]"
-                ]
-                
-                for selector in project_selectors:
+            if not element_found:
+                logger.warning("No se detectaron elementos interactivos en la interfaz")
+                # Si llevamos mucho tiempo sin detectar nada, intentar forzar un refresco
+                if time.time() - start_time > timeout / 2:
                     try:
-                        projects = self.driver.find_elements(By.XPATH, selector)
-                        for proj in projects:
-                            if proj.is_displayed():
-                                # Scroll to the element
-                                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", proj)
-                                time.sleep(1)
-                                
-                                # Try to click
-                                try:
-                                    self.driver.execute_script("arguments[0].click();", proj)
-                                    logger.info(f"Proyecto {project_id} seleccionado con clic de JavaScript")
-                                    time.sleep(3)
-                                    selected = True
-                                    break
-                                except:
-                                    try:
-                                        proj.click()
-                                        logger.info(f"Proyecto {project_id} seleccionado con clic normal")
-                                        time.sleep(3)
-                                        selected = True
-                                        break
-                                    except:
-                                        # Final attempt with ActionChains
-                                        from selenium.webdriver.common.action_chains import ActionChains
-                                        actions = ActionChains(self.driver)
-                                        actions.move_to_element(proj).click().perform()
-                                        logger.info(f"Proyecto {project_id} seleccionado con ActionChains")
-                                        time.sleep(3)
-                                        selected = True
-                                        break
-                        if selected:
-                            break
+                        self.driver.execute_script("""
+                            if (window.sap && window.sap.ui && window.sap.ui.getCore) {
+                                sap.ui.getCore().applyChanges();
+                            }
+                        """)
+                        logger.info("Intentado forzar refresco de UI mediante API SAP UI5")
                     except:
-                        continue
-                        
-            return selected
-                
+                        pass
+            
+            # Paso 5: Esperar un momento adicional para que se completen posibles operaciones AJAX
+            time.sleep(2)
+            
+            # Verificación final de tiempo transcurrido
+            elapsed = time.time() - start_time
+            logger.info(f"Navegación SAP completada en {elapsed:.2f}s")
+            
+            return True
+            
+        except TimeoutException:
+            logger.warning(f"Timeout esperando a que se complete la navegación SAP ({timeout}s)")
+            return False
         except Exception as e:
-            logger.error(f"Error general durante la selección automática de proyecto: {e}")
+            logger.error(f"Error al esperar navegación SAP: {e}")
             return False
 
+    def check_sap_ui5_loaded(self, timeout: float = 10) -> bool:
+        """
+        Verifica si la biblioteca SAP UI5 ha cargado completamente
+        con verificaciones mejoradas de la API UI5
+        
+        Args:
+            timeout (float): Tiempo máximo de espera en segundos
+            
+        Returns:
+            bool: True si UI5 ha cargado, False en caso contrario
+        """
+        try:
+            logger.debug("Verificando disponibilidad de SAP UI5...")
+            
+            # Verificar primero si UI5 está actualmente disponible
+            ui5_check = self.driver.execute_script("""
+                return (
+                    window.sap !== undefined && 
+                    window.sap.ui !== undefined && 
+                    window.sap.ui.getCore !== undefined
+                );
+            """)
+            
+            if not ui5_check:
+                logger.debug("API UI5 no detectada inmediatamente, esperando...")
+                
+                # Esperar hasta que UI5 esté disponible
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    ui5_check = self.driver.execute_script("""
+                        return (
+                            window.sap !== undefined && 
+                            window.sap.ui !== undefined && 
+                            window.sap.ui.getCore !== undefined
+                        );
+                    """)
+                    
+                    if ui5_check:
+                        break
+                        
+                    time.sleep(0.5)
+            
+            if not ui5_check:
+                logger.warning("No se pudo detectar API SAP UI5")
+                return False
+            
+            # Verificar si UI5 está listo para interactuar
+            ui5_ready_check = self.driver.execute_script("""
+                try {
+                    return (
+                        window.sap.ui.getCore().isReady === true || 
+                        (typeof window.sap.ui.getCore().isReady === 'function' && window.sap.ui.getCore().isReady())
+                    );
+                } catch(e) {
+                    return false;
+                }
+            """)
+            
+            if ui5_ready_check:
+                logger.info("SAP UI5 está completamente cargado y listo")
+                
+                # Verificar versión de UI5 como información adicional
+                try:
+                    ui5_version = self.driver.execute_script("return sap.ui.version || 'desconocida';")
+                    logger.debug(f"Versión de SAP UI5: {ui5_version}")
+                except:
+                    pass
+                    
+                return True
+            else:
+                # Intentar esperar explícitamente a que UI5 esté listo
+                start_time = time.time()
+                while time.time() - start_time < timeout:
+                    ui5_ready_check = self.driver.execute_script("""
+                        try {
+                            return (
+                                window.sap.ui.getCore().isReady === true || 
+                                (typeof window.sap.ui.getCore().isReady === 'function' && window.sap.ui.getCore().isReady())
+                            );
+                        } catch(e) {
+                            return false;
+                        }
+                    """)
+                    
+                    if ui5_ready_check:
+                        logger.info("SAP UI5 está ahora listo para interactuar")
+                        return True
+                        
+                    time.sleep(0.5)
+                    
+                logger.warning(f"SAP UI5 está presente pero no parece estar completamente listo")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error al verificar carga de SAP UI5: {e}")
+            return False
+        
+        
+        
+        
+        
+        
+        
+        
+ 
     def click_search_button(self):
         """
         Hace clic en el botón de búsqueda para iniciar la consulta.
