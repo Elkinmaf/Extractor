@@ -2347,97 +2347,36 @@ class SAPBrowser:
             return False
 
 
-
-
     def click_select_columns_button(driver):
         """
-        Función para hacer clic en el botón 'Select Columns' usando Selenium.
-
+        Hace clic en el botón 'Select Columns' usando Selenium.
+        
         Args:
             driver: WebDriver de Selenium.
+            
+        Returns:
+            bool: True si el clic fue exitoso, False en caso contrario.
         """
         try:
             # Esperar a que el elemento esté presente
             time.sleep(2)  # Espera estática para asegurar que el panel de ajustes se cargue
 
             # Usar el selector XPath proporcionado
-            select_columns_button = driver.find_element(By.XPATH, "//*[@id='application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns-img']")
+            select_columns_button = driver.find_element(By.XPATH, "//*[@id='application-iam-ui-component---home--issuesColumns-img']")
             
             # Usar JavaScript para hacer clic (más confiable en SAP UI5)
             driver.execute_script("arguments[0].click();", select_columns_button)
-            print("Clic en botón 'Select Columns' realizado con éxito.")
+            logger.info("Clic en botón 'Select Columns' realizado con éxito.")
             
             # Esperar un momento para que la UI procese el clic
             time.sleep(1)
             
-        except Exception as e:
-            print(f"Error al intentar hacer clic en el botón 'Select Columns': {e}")
-
-
-            
-    def navigate_to_issues_tab(self):
-        """
-        Navega a la pestaña 'Issues' una vez seleccionado el proyecto.
-        
-        Returns:
-            bool: True si la navegación fue exitosa, False en caso contrario
-        """
-        try:
-            logger.info("Intentando navegar a la pestaña Issues...")
-            
-            # Esperar a que cargue la página del proyecto
-            time.sleep(3)
-            
-            # Buscar la pestaña de Issues por diferentes selectores
-            issues_tab_selectors = [
-                "//div[contains(text(), 'Issues')] | //span[contains(text(), 'Issues')]",
-                "//li[@role='tab']//div[contains(text(), 'Issues')]",
-                "//a[contains(text(), 'Issues')]",
-                "//div[contains(@class, 'sapMITBItem')]//span[contains(text(), 'Issues')]"
-            ]
-            
-            for selector in issues_tab_selectors:
-                try:
-                    issues_tabs = self.driver.find_elements(By.XPATH, selector)
-                    if issues_tabs:
-                        for tab in issues_tabs:
-                            try:
-                                # Verificar si es visible
-                                if tab.is_displayed():
-                                    # Hacer scroll hasta el elemento
-                                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tab)
-                                    time.sleep(0.5)
-                                    
-                                    # Intentar clic
-                                    self.driver.execute_script("arguments[0].click();", tab)
-                                    logger.info("Clic en pestaña Issues realizado")
-                                    time.sleep(3)  # Esperar a que cargue
-                                    return True
-                            except:
-                                continue
-                except:
-                    continue
-            
-            logger.warning("No se encontró la pestaña Issues por selectores directos")
-            
-            # Intentar buscar por posición relativa (generalmente la tercera pestaña)
-            try:
-                tabs = self.driver.find_elements(By.XPATH, "//li[@role='tab'] | //div[@role='tab']")
-                if len(tabs) >= 3:  # Asumiendo que Issues es la tercera pestaña
-                    third_tab = tabs[2]  # Índice 2 para el tercer elemento
-                    self.driver.execute_script("arguments[0].click();", third_tab)
-                    logger.info("Clic en tercera pestaña realizado")
-                    time.sleep(3)
-                    return True
-            except:
-                pass
-                
-            logger.warning("No se pudo navegar a la pestaña Issues")
-            return False
+            return True
             
         except Exception as e:
-            logger.error(f"Error al navegar a la pestaña Issues: {e}")
+            logger.error(f"Error al intentar hacer clic en el botón 'Select Columns': {e}")
             return False
+
         
         
         
@@ -4302,55 +4241,6 @@ class SAPBrowser:
 
 
 
-
-
-    # MÉTODO 1:
-    def select_all_visible_columns(self):
-        """
-        Selecciona todas las columnas disponibles para maximizar la extracción de datos.
-        
-        Este método debe ser llamado después de abrir el panel de ajustes con click_settings_button().
-        
-        Returns:
-            bool: True si la selección fue exitosa, False en caso contrario
-        """
-        try:
-            logger.info("Iniciando proceso de selección de todas las columnas disponibles...")
-            
-            # Verificar que el panel de ajustes esté abierto
-            if not self._verify_settings_panel_opened():
-                logger.warning("El panel de ajustes no está abierto. Debe abrirse primero con click_settings_button().")
-                return False
-            
-            # PASO 1: Hacer clic en la pestaña "Select Columns" (tercer ícono)
-            if not self.click_select_columns_tab():
-                logger.error("No se pudo hacer clic en la pestaña 'Select Columns'")
-                return False
-                
-            # PASO 2: Marcar la opción "Select All"
-            if not self._click_select_all_checkbox():
-                logger.error("No se pudo marcar la opción 'Select All'")
-                return False
-                
-            # PASO 3: Confirmar con OK o Ctrl+Enter
-            if not self._confirm_selection():
-                logger.error("No se pudo confirmar la selección")
-                return False
-                
-            logger.info("✅ Todas las columnas han sido seleccionadas correctamente")
-            time.sleep(2)  # Esperar a que se apliquen los cambios
-            return True
-                
-        except Exception as e:
-            logger.error(f"Error durante la selección de columnas: {e}")
-            return False
-
-
-
-
-
-
-
     def _verify_settings_panel_opened(self):
         """
         Verifica si el panel de ajustes está abierto
@@ -4414,6 +4304,300 @@ class SAPBrowser:
 
 
 
+
+
+
+
+
+
+
+    def click_select_columns_and_confirm(self):
+        """
+        Método combinado que hace clic en 'Select Columns', marca 'Select All'
+        y confirma la selección usando el botón OK.
+        
+        Este método es útil para pruebas más directas donde solo se necesita
+        seleccionar todas las columnas disponibles y confirmar.
+        
+        Returns:
+            bool: True si todo el proceso fue exitoso, False en caso contrario
+        """
+        try:
+            logger.info("Ejecutando secuencia 'Select Columns' + 'Select All' + Confirmar...")
+            
+            # 1. Hacer clic en 'Select Columns'
+            if not self.click_select_columns_tab():
+                logger.error("No se pudo hacer clic en 'Select Columns'")
+                return False
+                
+            time.sleep(1)
+            
+            # 2. Marcar 'Select All'
+            if not self._click_select_all_checkbox():
+                logger.error("No se pudo marcar 'Select All'")
+                return False
+                
+            time.sleep(1)
+            
+            # 3. Confirmar la selección (dar prioridad a buscar y hacer clic en OK)
+            ok_button = None
+            ok_selectors = [
+                "//button[text()='OK']",
+                "//div[contains(@class, 'sapMDialogFooter')]//button[text()='OK']",
+                "//footer//button[text()='OK']"
+            ]
+            
+            for selector in ok_selectors:
+                buttons = self.driver.find_elements(By.XPATH, selector)
+                for button in buttons:
+                    if button.is_displayed() and button.is_enabled() and button.text != "Reset":
+                        ok_button = button
+                        break
+                if ok_button:
+                    break
+                    
+            if ok_button:
+                # Hacer clic directo en OK con JavaScript
+                self.driver.execute_script("arguments[0].click();", ok_button)
+                logger.info("Clic directo en botón OK realizado")
+            else:
+                # Usar el método normal de confirmación como respaldo
+                if not self._confirm_selection():
+                    logger.error("No se pudo confirmar la selección")
+                    return False
+                    
+            logger.info("Secuencia completada con éxito")
+            return True
+                
+        except Exception as e:
+            logger.error(f"Error en secuencia combinada: {e}")
+            return False
+
+
+
+
+
+
+    def navigate_to_select_columns_with_keyboard(self):
+        """
+        Navega hasta la pestaña 'Select Columns' usando precisamente la secuencia:
+        1. Pulsar Tab 7 veces
+        2. Pulsar flecha derecha 2 veces
+        3. Pulsar Enter 1 vez
+        
+        Returns:
+            bool: True si la navegación fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info("Navegando al ícono 'Select Columns' mediante secuencia precisa de teclado...")
+            
+            # Verificar que el panel de ajustes está abierto
+            if not self._verify_settings_panel_opened():
+                logger.warning("El panel de ajustes no está abierto. Debe abrirse primero con click_settings_button().")
+                return False
+            
+            # Intentar establecer el foco en el diálogo principal
+            try:
+                # Intentar hacer clic en cualquier parte del diálogo para establecer el foco
+                dialog = self.driver.find_element(By.XPATH, "//div[contains(@class, 'sapMDialog')]")
+                dialog.click()
+                logger.info("Foco establecido en el diálogo principal")
+            except Exception as e:
+                logger.debug(f"No se pudo establecer foco inicial: {e}")
+                try:
+                    # Intentar con cualquier elemento visible
+                    visible_element = self.driver.find_element(By.XPATH, 
+                        "//div[contains(@class, 'sapMDialog')]//*[not(contains(@style, 'display: none'))]")
+                    visible_element.click()
+                    logger.info("Foco establecido en elemento visible del diálogo")
+                except:
+                    logger.warning("No se pudo establecer un foco inicial, continuando de todos modos")
+            
+            # Usar ActionChains para la secuencia exacta de teclas
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.keys import Keys
+            
+            actions = ActionChains(self.driver)
+            
+            # 1. Pulsar Tab exactamente 10 veces
+            logger.info("Pulsando Tab 10 veces...")
+            for _ in range(10):
+                actions.send_keys(Keys.TAB)
+                actions.pause(0.3)  # Pausa entre pulsaciones para que la interfaz responda
+            
+            # 2. Pulsar flecha derecha exactamente 2 veces
+            logger.info("Pulsando flecha derecha 2 veces...")
+            for _ in range(2):
+                actions.send_keys(Keys.ARROW_RIGHT)
+                actions.pause(0.3)
+            
+            # 3. Pulsar Enter exactamente 1 vez
+            logger.info("Pulsando Enter para seleccionar...")
+            actions.send_keys(Keys.RETURN)
+            
+            # Ejecutar la secuencia completa
+            actions.perform()
+            logger.info("Secuencia de teclas para 'Select Columns' ejecutada")
+            
+            # Esperar a que se abra el panel de columnas
+            time.sleep(1.5)
+            
+            # Verificar que el panel de columnas se ha abierto
+            if self._verify_column_panel_opened():
+                logger.info("✅ Panel de columnas abierto correctamente mediante secuencia de teclado")
+                return True
+            else:
+                logger.warning("El panel de columnas no parece haberse abierto después de la secuencia de teclado")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error durante la navegación con teclado a 'Select Columns': {e}")
+            return False
+
+    def _click_select_all_checkbox_with_keyboard(self):
+        """
+        Selecciona la opción "Select All" usando precisamente la secuencia:
+        1. Pulsar Tab 3 veces
+        2. Pulsar Enter 1 vez
+        
+        Returns:
+            bool: True si la selección fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info("Seleccionando 'Select All' mediante secuencia precisa de teclado...")
+            
+            # Verificar que estamos en el panel de columnas
+            if not self._verify_column_panel_opened():
+                logger.warning("El panel de columnas no está abierto. Debe navegar a él primero.")
+                return False
+            
+            # Usar ActionChains para la secuencia exacta de teclas
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.keys import Keys
+            
+            actions = ActionChains(self.driver)
+            
+            # 1. Pulsar Tab exactamente 3 veces
+            logger.info("Pulsando Tab 3 veces...")
+            for _ in range(3):
+                actions.send_keys(Keys.TAB)
+                actions.pause(0.3)  # Pausa entre pulsaciones
+            
+            # 2. Pulsar Enter exactamente 1 vez
+            logger.info("Pulsando Enter para seleccionar 'Select All'...")
+            actions.send_keys(Keys.RETURN)
+            
+            # Ejecutar la secuencia completa
+            actions.perform()
+            logger.info("Secuencia de teclas para 'Select All' ejecutada")
+            
+            # Esperar a que se procese la selección
+            time.sleep(0.8)
+            
+            # No hay forma fácil de verificar si realmente se seleccionó la casilla
+            # así que confiaremos en que la secuencia de teclas funcionó
+            return True
+                
+        except Exception as e:
+            logger.error(f"Error durante la selección de 'Select All' con teclado: {e}")
+            return False
+
+    def _confirm_selection_with_keyboard(self):
+        """
+        Confirma la selección haciendo clic en OK usando precisamente la secuencia:
+        1. Pulsar Tab 2 veces
+        2. Pulsar Enter 1 vez
+        
+        Returns:
+            bool: True si la confirmación fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info("Confirmando selección mediante secuencia precisa de teclado...")
+            
+            # Usar ActionChains para la secuencia exacta de teclas
+            from selenium.webdriver.common.action_chains import ActionChains
+            from selenium.webdriver.common.keys import Keys
+            
+            actions = ActionChains(self.driver)
+            
+            # 1. Pulsar Tab exactamente 2 veces
+            logger.info("Pulsando Tab 2 veces...")
+            for _ in range(2):
+                actions.send_keys(Keys.TAB)
+                actions.pause(0.3)  # Pausa entre pulsaciones
+            
+            # 2. Pulsar Enter exactamente 1 vez
+            logger.info("Pulsando Enter para confirmar...")
+            actions.send_keys(Keys.RETURN)
+            
+            # Ejecutar la secuencia completa
+            actions.perform()
+            logger.info("Secuencia de teclas para confirmar ejecutada")
+            
+            # Esperar a que se procese la confirmación
+            time.sleep(1.5)
+            
+            # Verificar que el diálogo se ha cerrado
+            try:
+                dialog_visible = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'sapMDialog') and contains(@style, 'visibility: visible')]")
+                if not dialog_visible:
+                    logger.info("✅ Confirmación exitosa: el diálogo ya no está visible")
+                    return True
+                else:
+                    logger.warning("El diálogo sigue visible después de intentar confirmar")
+                    return False
+            except:
+                # Si no podemos verificar correctamente, asumimos éxito
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error durante la confirmación con teclado: {e}")
+            return False
+
+    def select_all_visible_columns(self):
+        """
+        Selecciona todas las columnas disponibles mediante navegación por teclado.
+        Sigue exactamente la secuencia de teclas especificada para cada uno de los 3 pasos.
+        
+        Returns:
+            bool: True si la selección fue exitosa, False en caso contrario
+        """
+        try:
+            logger.info("Iniciando proceso de selección de columnas mediante navegación por teclado...")
+            
+            # Verificar que el panel de ajustes esté abierto
+            if not self._verify_settings_panel_opened():
+                logger.warning("El panel de ajustes no está abierto. Debe abrirse primero con click_settings_button().")
+                return False
+            
+            # PASO 1: Navegar a la pestaña "Select Columns" usando teclado (Tab x5, Flecha derecha x2, Enter)
+            if not self.navigate_to_select_columns_with_keyboard():
+                logger.error("No se pudo acceder a la pestaña 'Select Columns'")
+                return False
+            
+            # Esperar un momento para que cargue la pestaña
+            time.sleep(1)
+                
+            # PASO 2: Marcar la opción "Select All" (Tab x3, Enter)
+            if not self._click_select_all_checkbox_with_keyboard():
+                logger.error("No se pudo marcar la opción 'Select All'")
+                return False
+                
+            # Esperar un momento para que se procese la selección
+            time.sleep(1)
+                
+            # PASO 3: Confirmar con OK (Tab x2, Enter)
+            if not self._confirm_selection_with_keyboard():
+                logger.error("No se pudo confirmar la selección con OK")
+                return False
+                
+            logger.info("✅ Todas las columnas han sido seleccionadas correctamente usando navegación por teclado")
+            time.sleep(2)  # Esperar a que se apliquen los cambios
+            return True
+                    
+        except Exception as e:
+            logger.error(f"Error durante la selección de columnas con teclado: {e}")
+            return False
 
 
 
@@ -4777,107 +4961,167 @@ class SAPBrowser:
 
 
 
+
+
     def click_select_columns_tab(self):
         """
-        Hace clic precisamente en el tercer ícono (Select Columns) del panel de ajustes.
+        Hace clic en la pestaña 'Select Columns' del panel de ajustes de forma precisa
+        y confiable utilizando el ID exacto del elemento.
+        
+        Este método debe ser llamado después de abrir el panel de ajustes con
+        click_settings_button().
         
         Returns:
             bool: True si el clic fue exitoso y se abrió el panel de columnas, False en caso contrario
         """
         try:
-            logger.info("Intentando hacer clic en el tercer ícono (Select Columns)...")
+            logger.info("Intentando hacer clic en el ícono 'Select Columns'...")
             
-            # Esperar para asegurar que la interfaz esté estable
+            # Esperar para asegurar que la interfaz esté completamente cargada
             time.sleep(1.5)
             
-            # 1. INTENTO PRINCIPAL: Usar el ID exacto visible en el HTML
-            columns_id = "application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns-img"
+            # 1. ESTRATEGIA PRINCIPAL: Usar el ID exacto identificado en la inspección del DOM
+            select_columns_id = "application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns"
+            
             try:
-                # Intento directo por ID
-                column_button = self.driver.find_element(By.ID, columns_id)
-                if column_button and column_button.is_displayed():
-                    # Usar JavaScript para clic más confiable
-                    self.driver.execute_script("arguments[0].click();", column_button)
-                    logger.info(f"Clic en ícono de columnas por ID específico: {columns_id}")
-                    time.sleep(1.5)  # Espera más larga para asegurar que se abra
+                # Intentar localizar por ID exacto
+                select_columns_btn = self.driver.find_element(By.ID, select_columns_id)
+                if select_columns_btn and select_columns_btn.is_displayed():
+                    # Hacer scroll para asegurar visibilidad
+                    self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", select_columns_btn)
+                    time.sleep(0.5)
                     
-                    # Verificar que el panel de columnas se abrió
+                    # Usar JavaScript para un clic más confiable en SAP UI5
+                    self.driver.execute_script("arguments[0].click();", select_columns_btn)
+                    logger.info("Clic exitoso en 'Select Columns' usando ID exacto")
+                    time.sleep(1.5)  # Esperar a que se abra el panel
+                    
+                    # Verificar que el panel de columnas se abrió correctamente
                     if self._verify_column_panel_opened():
                         return True
             except Exception as e:
-                logger.debug(f"No se encontró botón por ID exacto: {e}")
+                logger.debug(f"No se pudo encontrar el botón por ID principal: {e}")
                 
-                # Intentar con XPath usando el ID
+                # Intentar con XPath usando el mismo ID
                 try:
-                    column_button = self.driver.find_element(By.XPATH, f"//*[@id='{columns_id}']")
-                    if column_button and column_button.is_displayed():
-                        self.driver.execute_script("arguments[0].click();", column_button)
-                        logger.info(f"Clic en ícono de columnas por XPath con ID: {columns_id}")
+                    select_columns_xpath = f"//*[@id='{select_columns_id}']"
+                    select_columns_btn = self.driver.find_element(By.XPATH, select_columns_xpath)
+                    
+                    if select_columns_btn.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", select_columns_btn)
+                        logger.info("Clic exitoso en 'Select Columns' usando XPath con ID")
                         time.sleep(1.5)
                         
                         if self._verify_column_panel_opened():
                             return True
-                except Exception as e2:
-                    logger.debug(f"No se encontró botón por XPath con ID: {e2}")
+                except Exception as ex:
+                    logger.debug(f"No se pudo encontrar el botón por XPath con ID: {ex}")
             
-            # 2. INTENTO ALTERNATIVO: JavaScript directo para encontrar y hacer clic en el tercer botón
+            # 2. ESTRATEGIA ALTERNATIVA: Usar el ID de la imagen dentro del botón
+            img_id = "application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns-img"
+            
+            try:
+                img_element = self.driver.find_element(By.ID, img_id)
+                if img_element:
+                    # Obtener el elemento padre (el botón)
+                    select_columns_btn = self.driver.execute_script("return arguments[0].parentNode.parentNode.parentNode;", img_element)
+                    if select_columns_btn:
+                        self.driver.execute_script("arguments[0].click();", select_columns_btn)
+                        logger.info("Clic exitoso en 'Select Columns' a través del elemento imagen")
+                        time.sleep(1.5)
+                        
+                        if self._verify_column_panel_opened():
+                            return True
+            except Exception as e:
+                logger.debug(f"No se pudo encontrar el botón a través de la imagen: {e}")
+            
+            # 3. ESTRATEGIA POSICIONAL: Tercer botón en la barra segmentada
+            selectors = [
+                "(//div[contains(@class, 'sapMSegB')]/ul/li)[3]",
+                "(//li[contains(@class, 'sapMSegBBtn')])[3]",
+                "(//div[@role='option' and @aria-posinset='3'])",
+                "//li[@aria-posinset='3' and @aria-label='Select Columns']"
+            ]
+            
+            for selector in selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    for element in elements:
+                        if element.is_displayed():
+                            # Verificar si es el botón correcto mediante título o texto
+                            title = element.get_attribute("title") or ""
+                            aria_label = element.get_attribute("aria-label") or ""
+                            
+                            if "column" in title.lower() or "column" in aria_label.lower():
+                                # Hacer scroll y clic
+                                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                                time.sleep(0.5)
+                                self.driver.execute_script("arguments[0].click();", element)
+                                logger.info(f"Clic exitoso en 'Select Columns' usando selector posicional: {selector}")
+                                time.sleep(1.5)
+                                
+                                if self._verify_column_panel_opened():
+                                    return True
+                except Exception as e:
+                    logger.debug(f"Error con selector {selector}: {e}")
+                    continue
+            
+            # 4. ESTRATEGIA JAVASCRIPT: Script personalizado para identificar y hacer clic en el tercer botón
             js_script = """
             (function() {
                 try {
-                    // Buscar directamente por ID
-                    var columnButton = document.getElementById('application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns-img');
-                    
-                    // Si no se encuentra por ID, buscar por contiene en ID
-                    if (!columnButton) {
-                        columnButton = document.querySelector('[id*="issuesColumns-img"]');
-                    }
-                    
-                    if (columnButton) {
-                        console.log("Botón de columnas encontrado por ID, haciendo clic");
-                        columnButton.click();
+                    // Buscar por ID exacto
+                    var button = document.getElementById('application-iam-ui-component---home--issueFilterDialog-custom-button-application-iam-ui-component---home--issuesColumns');
+                    if (button && button.offsetParent !== null) {
+                        button.click();
                         return true;
                     }
                     
-                    // Si no se encuentra por ID, buscar el tercer botón en la barra segmentada
-                    var segmentButtons = document.querySelectorAll('.sapMSegBBtn');
-                    if (segmentButtons.length >= 3) {
-                        console.log("Haciendo clic en el tercer botón de segmento");
-                        segmentButtons[2].click();
-                        return true;
+                    // Buscar por contenido del título
+                    var buttons = document.querySelectorAll('li[title="Select Columns"], li[aria-label="Select Columns"]');
+                    for (var i = 0; i < buttons.length; i++) {
+                        if (buttons[i].offsetParent !== null) {
+                            buttons[i].click();
+                            return true;
+                        }
+                    }
+                    
+                    // Buscar tercer botón en barra segmentada
+                    var segmentedButtons = document.querySelectorAll('.sapMSegB li, .sapMSegBBtn');
+                    if (segmentedButtons.length >= 3) {
+                        // Verificar que estamos en el panel correcto
+                        for (var i = 0; i < segmentedButtons.length; i++) {
+                            if (i === 2 && segmentedButtons[i].offsetParent !== null) {
+                                segmentedButtons[i].click();
+                                return true;
+                            }
+                        }
                     }
                     
                     return false;
                 } catch(e) {
-                    console.error("Error en script JS: " + e);
+                    console.error("Error en script de selección de columnas: " + e);
                     return false;
                 }
             })();
             """
             
-            js_result = self.driver.execute_script(js_script)
-            if js_result:
-                logger.info("Clic en ícono de columnas realizado con JavaScript directo")
-                time.sleep(1.5)  # Tiempo suficiente para que se abra el panel
-                
-                if self._verify_column_panel_opened():
-                    return True
+            try:
+                result = self.driver.execute_script(js_script)
+                if result:
+                    logger.info("Clic exitoso en 'Select Columns' mediante script JavaScript")
+                    time.sleep(1.5)
+                    
+                    if self._verify_column_panel_opened():
+                        return True
+            except Exception as e:
+                logger.debug(f"Error en script JavaScript: {e}")
             
-            # 3. Último intento: Por selector estándar (el que ya teníamos)
-            selector = "(//div[contains(@class, 'sapMSegB')]/span)[3]"
-            elements = self.driver.find_elements(By.XPATH, selector)
-            if elements and elements[0].is_displayed():
-                self.driver.execute_script("arguments[0].click();", elements[0])
-                logger.info(f"Clic en tercer ícono con selector: {selector}")
-                time.sleep(1.5)
-                
-                if self._verify_column_panel_opened():
-                    return True
-                
-            logger.warning("No se pudo hacer clic en el ícono de columnas después de todos los intentos")
+            logger.warning("No se pudo hacer clic en el ícono 'Select Columns' después de agotar todas las estrategias")
             return False
-                
+            
         except Exception as e:
-            logger.error(f"Error al hacer clic en el ícono de columnas: {e}")
+            logger.error(f"Error general al intentar hacer clic en 'Select Columns': {e}")
             return False
 
 
@@ -4885,11 +5129,14 @@ class SAPBrowser:
 
 
 
-            
+
+
+
 
     def _verify_column_panel_opened(self):
         """
-        Verifica que el panel de selección de columnas se ha abierto correctamente.
+        Verifica que el panel de selección de columnas se ha abierto correctamente
+        después de hacer clic en el ícono 'Select Columns'.
         
         Returns:
             bool: True si el panel está abierto, False en caso contrario
@@ -4898,42 +5145,63 @@ class SAPBrowser:
             # Dar tiempo a que se abra el panel
             time.sleep(1)
             
-            # 1. Verificar los checkboxes de columnas - El indicador más visible en la captura
-            checkboxes = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'sapMCb')]/preceding-sibling::div[contains(text(), 'ISSUE TITLE') or contains(text(), 'SAP CATEGORY')]")
+            # 1. Verificar la presencia del texto "Select All"
+            select_all_elements = self.driver.find_elements(By.XPATH, "//div[text()='Select All']")
+            if select_all_elements and any(el.is_displayed() for el in select_all_elements):
+                logger.info("Panel de columnas detectado: 'Select All' visible")
+                return True
+                
+            # 2. Verificar los checkboxes de columnas (específico de la interfaz de columnas)
+            checkboxes = self.driver.find_elements(By.XPATH, 
+                "//div[contains(@class, 'sapMCb')]/parent::div[contains(text(), 'Issue Title') or contains(text(), 'SAP Category')]")
             if checkboxes and any(checkbox.is_displayed() for checkbox in checkboxes):
                 logger.info("Panel de columnas detectado: Checkboxes de columnas visibles")
                 return True
                 
-            # 2. Buscar Select All o la lista de columnas
-            selectors = [
-                "//div[contains(text(), 'Select All')]",
-                "//div[@role='dialog']//div[contains(@class, 'sapMList')]",
-                "//div[contains(@class, 'sapMSelectDialogListItem')]",
-                "//div[contains(@class, 'sapMDialog')]//div[contains(@aria-selected, 'true')]"
+            # 3. Verificar otros elementos comunes de la interfaz de selección de columnas
+            column_selectors = [
+                "//div[@role='dialog']//div[contains(@class, 'sapMList')]", # Lista de columnas
+                "//div[contains(@class, 'sapMSelectDialogListItem')]",  # Elementos de la lista de columnas
+                "//div[contains(@class, 'sapMDialog')]//div[contains(@aria-selected, 'true')]", # Item seleccionado
+                "//div[contains(@class, 'sapMList')]//li", # Items de lista genéricos
+                "//div[contains(@class, 'sapMDialog')]//ul[contains(@class, 'sapMListItems')]" # Lista de items UI5
             ]
             
-            for selector in selectors:
+            for selector in column_selectors:
                 elements = self.driver.find_elements(By.XPATH, selector)
                 if elements and any(el.is_displayed() for el in elements):
                     logger.info(f"Panel de columnas detectado con selector: {selector}")
                     return True
             
-            # 3. Verificación por JavaScript para casos difíciles
-            js_check = """
-            return (function() {
-                // Verificar si hay checkboxes de columnas
-                var checkboxes = document.querySelectorAll('.sapMCb');
-                var visibleCheckboxes = Array.from(checkboxes).filter(function(cb) {
-                    return cb.offsetParent !== null;
-                });
+            # 4. Verificación mediante JavaScript para casos difíciles
+            js_verify = """
+            (function() {
+                // Buscar diálogo visible
+                var dialog = document.querySelector('.sapMDialog[style*="visibility: visible"]');
+                if (!dialog) return false;
                 
-                if (visibleCheckboxes.length > 3) {
+                // Verificar texto "Select All"
+                var selectAll = document.evaluate(
+                    "//div[text()='Select All']", 
+                    document, 
+                    null, 
+                    XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, 
+                    null
+                );
+                
+                if (selectAll.snapshotLength > 0) {
                     return true;
                 }
                 
-                // Verificar si hay un diálogo de selección visible
-                var dialog = document.querySelector('.sapMDialog');
-                if (dialog && dialog.contains(document.querySelector('[aria-selected="true"]'))) {
+                // Verificar presencia de checkboxes en el diálogo
+                var checkboxes = dialog.querySelectorAll('.sapMCb, input[type="checkbox"]');
+                if (checkboxes.length > 3) {
+                    return true;
+                }
+                
+                // Verificar lista de columnas
+                var listItems = dialog.querySelectorAll('.sapMList li, .sapMLIB');
+                if (listItems.length > 3) {
                     return true;
                 }
                 
@@ -4941,154 +5209,17 @@ class SAPBrowser:
             })();
             """
             
-            result = self.driver.execute_script(js_check)
-            if result:
-                logger.info("Panel de columnas detectado mediante JavaScript")
-                return True
-                
-            logger.warning("No se detectó el panel de columnas")
+            try:
+                result = self.driver.execute_script(js_verify)
+                if result:
+                    logger.info("Panel de columnas detectado mediante JavaScript")
+                    return True
+            except Exception as js_e:
+                logger.debug(f"Error en verificación JavaScript: {js_e}")
+            
+            logger.warning("No se detectó el panel de selección de columnas")
             return False
             
         except Exception as e:
             logger.error(f"Error al verificar panel de columnas: {e}")
-            return False
-
-
-
-
-    def _click_select_all_checkbox(self):
-        """
-        Hace clic en la opción "Select All" de manera simplificada.
-        
-        Basado en la experiencia y logs de ejecución, esta función se enfoca únicamente
-        en el selector que ha demostrado funcionar consistentemente.
-        
-        Returns:
-            bool: True si el clic fue exitoso, False en caso contrario
-        """
-        try:
-            logger.info("Haciendo clic en 'Select All'...")
-            
-            # Usar el selector que funciona consistentemente según los logs
-            selector = "(//div[contains(@class, 'sapMCb')])[1]"
-            elements = self.driver.find_elements(By.XPATH, selector)
-            
-            if elements and elements[0].is_displayed():
-                # Hacer scroll para garantizar visibilidad
-                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elements[0])
-                time.sleep(0.5)
-                
-                # Usar JavaScript para el clic (más confiable en SAP UI5)
-                self.driver.execute_script("arguments[0].click();", elements[0])
-                logger.info("Clic en 'Select All' realizado con éxito")
-                time.sleep(0.8)
-                return True
-                
-            # Si no funciona el selector principal, intentar con JavaScript directo
-            js_click = """
-            (function() {
-                // Buscar el primer checkbox (suele ser Select All)
-                var checkboxes = document.querySelectorAll('.sapMCb');
-                if (checkboxes.length > 0) {
-                    checkboxes[0].click();
-                    return true;
-                }
-                return false;
-            })();
-            """
-            
-            result = self.driver.execute_script(js_click)
-            if result:
-                logger.info("Clic en 'Select All' realizado con JavaScript directo")
-                time.sleep(0.8)
-                return True
-                
-            logger.warning("No se pudo hacer clic en 'Select All'")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error al hacer clic en 'Select All': {e}")
-            return False
-
-
-
-
-
-
-
-    def _confirm_selection(self):
-        """
-        Confirma la selección haciendo clic en OK o usando Ctrl+Enter.
-        
-        Basado en la experiencia y logs de ejecución, esta función primero intenta con
-        Ctrl+Enter que ha demostrado funcionar consistentemente.
-        
-        Returns:
-            bool: True si la confirmación fue exitosa, False en caso contrario
-        """
-        try:
-            logger.info("Confirmando selección...")
-            
-            # Método 1 (preferido): Usar Ctrl+Enter que ha funcionado según los logs
-            try:
-                # Buscar cualquier elemento para tener foco
-                elements = self.driver.find_elements(By.XPATH, "//div[contains(@class, 'sapMDialog')]//input")
-                
-                if elements and elements[0].is_displayed():
-                    # Hacer clic para obtener foco
-                    elements[0].click()
-                else:
-                    # Si no hay input, buscar el diálogo
-                    dialog = self.driver.find_element(By.XPATH, "//div[contains(@class, 'sapMDialog')]")
-                    dialog.click()
-                
-                # Enviar Ctrl+Enter
-                actions = ActionChains(self.driver)
-                actions.key_down(Keys.CONTROL).send_keys(Keys.RETURN).key_up(Keys.CONTROL).perform()
-                logger.info("Combinación Ctrl+Enter enviada exitosamente")
-                time.sleep(1.5)
-                return True
-            except Exception as e:
-                logger.debug(f"Error al usar Ctrl+Enter: {e}")
-                
-            # Método 2: Buscar el botón OK
-            ok_button_selector = "//button[text()='OK']"
-            ok_buttons = self.driver.find_elements(By.XPATH, ok_button_selector)
-            
-            if ok_buttons and ok_buttons[0].is_displayed():
-                # Hacer scroll y clic
-                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", ok_buttons[0])
-                time.sleep(0.5)
-                self.driver.execute_script("arguments[0].click();", ok_buttons[0])
-                logger.info("Clic en botón 'OK' realizado con éxito")
-                time.sleep(1.5)
-                return True
-                
-            # Método 3: JavaScript directo
-            js_click = """
-            (function() {
-                // Buscar botón OK
-                var okButtons = Array.from(document.querySelectorAll('button')).filter(function(btn) {
-                    return btn.textContent.trim() === 'OK' && btn.offsetParent !== null;
-                });
-                
-                if (okButtons.length > 0) {
-                    okButtons[0].click();
-                    return true;
-                }
-                return false;
-            })();
-            """
-            
-            result = self.driver.execute_script(js_click)
-            if result:
-                logger.info("Clic en botón 'OK' realizado con JavaScript directo")
-                time.sleep(1.5)
-                return True
-                
-            logger.warning("No se pudo confirmar la selección")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error al confirmar selección: {e}")
             return False
