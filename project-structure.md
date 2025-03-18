@@ -20,7 +20,7 @@ sap_issues_extractor/
 │   ├── sap_browser.py            # Implementación del navegador para SAP
 │   └── element_finder.py         # Funciones auxiliares para encontrar elementos web
         element_finder_sap.py     # (Adicional) Funciones específicas para SAP UI5
-        column_selection_manager.py
+        
 │
 ├── ui/                           # Interfaz de usuario
 │   ├── __init__.py
