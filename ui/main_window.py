@@ -1,649 +1,820 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-main_window.py - Implementación de la ventana principal de la interfaz gráfica
----
-Este módulo contiene la clase MainWindow que implementa la interfaz gráfica
-principal del extractor de issues de SAP, incluyendo todos los controles
-y manejadores de eventos necesarios.
-"""
-
 import os
-import sys
-import time
-import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from tkinter.font import Font
+import threading
+import logging
 from datetime import datetime
 
-# Intentar importar PIL para funciones gráficas mejoradas
+# Importar PIL solo si está disponible
 try:
     from PIL import Image, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
-# Importaciones de otros módulos del proyecto
-from config.settings import SAP_COLORS
-from utils.logger_config import setup_logger, setup_gui_logger
-from ui.dialogs import AboutDialog, SettingsDialog
-
-# Configurar logger
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class MainWindow:
-    """
-    Clase principal para la interfaz gráfica de usuario del extractor de SAP.
+    """Clase que maneja la interfaz de usuario principal para SAP Issues Extractor"""
     
-    Esta clase maneja la creación y configuración de la ventana principal,
-    así como la interacción con el resto de componentes del sistema.
-    """
-    
-    def __init__(self, root, extractor_instance):
+    def __init__(self, root, controller):
         """
         Inicializa la ventana principal
         
         Args:
             root (tk.Tk): Ventana raíz de Tkinter
-            extractor_instance: Instancia de la clase IssuesExtractor
+            controller (IssuesExtractor): Instancia del controlador principal
         """
         self.root = root
-        self.extractor = extractor_instance
-        self.image_cache = {}  # Para almacenar referencias a imágenes
+        self.controller = controller
+        self.compact_mode = True  # Por defecto, usar modo compacto para pantallas pequeñas
+        self.current_theme = "sap"  # Por defecto, usar tema SAP
+
+        # Crear atributos para componentes principales
+        self.header_frame = None
+        self.left_panel = None
+        self.right_panel = None
+        self.footer_frame = None
+        self.log_frame = None
+        self.log_text = None
+        self.client_combo = None
+        self.project_combo = None
         
-        # Configuraciones de la ventana principal
-        self.root.title("SAP Issues Extractor")
-        self.root.geometry("950x700")
-        self.root.minsize(800, 600)
-        self.root.configure(bg=SAP_COLORS["light"])
+        # Variables para widgets y controles
+        self.status_label = None
+        self.progress_bar = None
+        self.collapsed_sections = {"log": False}
         
-        # Variables Tkinter
-        self.status_var = tk.StringVar(value="Listo para iniciar")
-        self.excel_filename_var = tk.StringVar(value="No seleccionado")
-        
-        # Asignar las variables al extractor para que pueda actualizarlas
-        self.extractor.status_var = self.status_var
-        self.extractor.excel_filename_var = self.excel_filename_var
-        
-        # Crear interfaz
-        self.setup_ui()
-        
-        # Vincular eventos de cierre
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        # Configurar teclas de acceso rápido
-        self.setup_shortcuts()
-        
+        # Bindear variables del controlador
+        self.controller.status_var = tk.StringVar(value="Listo para iniciar")
+        self.controller.excel_filename_var = tk.StringVar(value="Archivo: No seleccionado")
+        self.controller.client_var = tk.StringVar(value="")
+        self.controller.project_var = tk.StringVar(value="")
+    
     def setup_ui(self):
-        """Configura todos los elementos de la interfaz de usuario"""
-        # Ajustar el tema según el sistema operativo
-        self._adjust_theme_for_platform()
+        """Configura toda la interfaz de usuario con un diseño adaptativo"""
+        self._configure_root()
+        self._setup_styles()
+        self._create_main_layout()
+        self._create_header()
+        self._create_left_panel()
+        self._create_right_panel()
+        self._create_footer()
+        self._create_context_menu()
+        self._apply_sap_theme()
         
-        # Crear componentes en métodos separados
-        self._create_menu()
-        self._create_main_frame()
-        self._create_header_panel()
-        self._create_content_frame()
-        self._create_status_bar()
+        # Actualizar variables del controlador
+        self.controller.root = self.root
+        self.controller.log_text = self.log_text
+        self.controller.client_combo = self.client_combo
+        self.controller.project_combo = self.project_combo
         
-        # Configurar tab order
-        self._setup_tab_order()
+        # Conectar señales
+        self._connect_signals()
         
-        # Centrar ventana
-        self._center_window()
-        
-    def _adjust_theme_for_platform(self):
-        """Ajusta el tema según el sistema operativo para mejor integración"""
-        try:
-            import platform
-            system = platform.system()
+        # Comprobar altura de pantalla para ajustar automáticamente
+        self.root.update_idletasks()
+        screen_height = self.root.winfo_screenheight()
+        if screen_height < 600:  # Pantalla pequeña
+            self.toggle_compact_mode(True)
             
-            # Configurar tema dependiendo del sistema operativo
-            if system == "Windows":
-                # Usar colores nativos de Windows para algunos elementos
-                self.root.configure(bg="#F0F0F0")
-            elif system == "Darwin":  # macOS
-                # Ajustes específicos para macOS
-                self.root.configure(bg="#ECECEC")
-            elif system == "Linux":
-                # Ajustes específicos para Linux
-                pass
-                
-            logger.debug(f"Tema ajustado para plataforma: {system}")
-        except Exception as e:
-            logger.warning(f"No se pudo ajustar el tema para la plataforma: {e}")
+    def _configure_root(self):
+        """Configura la ventana principal"""
+        # Título y tamaño
+        self.root.title("SAP Issues Extractor")
+        self.root.geometry("900x580")
+        self.root.minsize(800, 500)
+        
+        # Ícono de la aplicación si está disponible
+        icon_path = os.path.join("assets", "icon.ico")
+        if os.path.exists(icon_path):
+            self.root.iconbitmap(icon_path)
             
-    def _create_menu(self):
-        """Crea la barra de menú de la aplicación"""
-        menu_bar = tk.Menu(self.root)
+        # Configurar comportamiento al cerrar
+        self.root.protocol("WM_DELETE_WINDOW", self.controller.exit_app)
         
-        # Menú Archivo
-        file_menu = tk.Menu(menu_bar, tearoff=0)
-        file_menu.add_command(label="Seleccionar/Crear Excel", command=self.extractor.choose_excel_file)
-        file_menu.add_separator()
-        file_menu.add_command(label="Salir", command=self.on_closing)
-        menu_bar.add_cascade(label="Archivo", menu=file_menu)
+        # Hacer que la ventana sea redimensionable
+        self.root.resizable(True, True)
         
-        # Menú Navegador
-        browser_menu = tk.Menu(menu_bar, tearoff=0)
-        browser_menu.add_command(label="Iniciar Navegador", command=self.extractor.start_browser)
-        browser_menu.add_command(label="Extraer Issues", command=self.extractor.start_extraction)
-        menu_bar.add_cascade(label="Navegador", menu=browser_menu)
+        # Configurar grid weights para hacer la ventana adaptativa
+        self.root.grid_columnconfigure(0, weight=1)
+        self.root.grid_rowconfigure(0, weight=0)  # Header - tamaño fijo
+        self.root.grid_rowconfigure(1, weight=1)  # Contenido - expandible
+        self.root.grid_rowconfigure(2, weight=0)  # Footer - tamaño fijo
+    
+    def _setup_styles(self):
+        """Configura los estilos para ttk widgets"""
+        self.style = ttk.Style()
         
-        # Menú Herramientas
-        tools_menu = tk.Menu(menu_bar, tearoff=0)
-        tools_menu.add_command(label="Configuración", command=self.show_settings)
-        menu_bar.add_cascade(label="Herramientas", menu=tools_menu)
+        # Definir fuentes - SAP usa Segoe UI
+        self.default_font = Font(family="Segoe UI", size=9)
+        self.header_font = Font(family="Segoe UI", size=12, weight="bold")
+        self.small_font = Font(family="Segoe UI", size=8)
+        self.button_font = Font(family="Segoe UI", size=9)
         
-        # Menú Ayuda
-        help_menu = tk.Menu(menu_bar, tearoff=0)
-        help_menu.add_command(label="Acerca de", command=self.show_about)
-        menu_bar.add_cascade(label="Ayuda", menu=help_menu)
+        # Colores SAP
+        self.sap_blue = "#1F4E78"         # Azul SAP principal
+        self.sap_light_blue = "#427CAC"   # Azul SAP claro
+        self.sap_dark_blue = "#154063"    # Azul SAP oscuro
+        self.sap_bg = "#F5F5F5"           # Fondo gris claro
+        self.sap_section_bg = "#E6E6E6"   # Fondo de secciones
+        self.sap_fg = "#333333"           # Texto oscuro
+        self.sap_border = "#CCCCCC"       # Borde gris
         
-        # Establecer el menú
-        self.root.config(menu=menu_bar)
+        # Configurar estilo para frame con borde
+        self.style.configure("Card.TFrame", borderwidth=1, relief="solid", background="#FFFFFF")
         
-    def _create_main_frame(self):
-        """Crea el marco principal de la aplicación"""
-        self.main_frame = ttk.Frame(self.root, padding="10")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
-        
-    def _create_header_panel(self):
-        """Crea el panel de cabecera con logo y título"""
-        try:
-            # Frame de cabecera
-            self.header_frame = ttk.Frame(self.main_frame)
-            self.header_frame.pack(fill=tk.X, pady=(0, 15))
+        # Botones principales - estilo SAP Fiori
+        self.style.configure("Primary.TButton", 
+                           font=self.button_font, 
+                           background=self.sap_blue,
+                           foreground="white")
+        padding=(5,4)
+                           
+        self.style.map("Primary.TButton", 
+            background=[('active', self.sap_light_blue), ('pressed', self.sap_dark_blue)],
+            foreground=[('active', 'white'), ('pressed', 'white')])
             
-            # Intentar cargar logo si PIL está disponible
-            logo_photo = None
-            if PIL_AVAILABLE:
+        # Botones secundarios
+        self.style.configure("Secondary.TButton", font=self.button_font)
+        
+        # Etiquetas de secciones
+        self.style.configure("Section.TLabel", 
+                           font=self.default_font, 
+                           background=self.sap_section_bg, 
+                           foreground=self.sap_fg,
+                           padding=5)
+        
+        # Separadores
+        self.style.configure("Horizontal.TSeparator", background=self.sap_border)
+        
+        # Progreso
+        self.style.configure("TProgressbar", 
+                          thickness=6, 
+                          background=self.sap_blue)
+        
+        # Combobox
+        self.style.configure("TCombobox", 
+                          padding=2, 
+                          font=self.default_font)
+        
+        # Scrollbars más delgados
+        self.style.configure("TScrollbar", 
+                          gripcount=0, 
+                          background=self.sap_border,
+                          troughcolor="#EEEEEE", 
+                          arrowsize=12, 
+                          arrowcolor="#666666",
+                          width=10)
+                          
+    def _apply_sap_theme(self):
+        """Aplica el tema de SAP a la interfaz"""
+        # Colores del tema SAP
+        bg_color = "#FFFFFF"
+        fg_color = "#333333"
+        section_bg = "#E6E6E6"
+        card_border = "#CCCCCC"
+        highlight_color = "#1F4E78"
+        
+        # Aplicar tema a los widgets principales
+        self.style.configure("TFrame", background=bg_color)
+        self.style.configure("Card.TFrame", background=bg_color, borderwidth=1, relief="solid")
+        self.style.configure("TLabel", background=bg_color, foreground=fg_color)
+        self.style.configure("Section.TLabel", background=section_bg, foreground=fg_color)
+        self.style.configure("TButton", background=bg_color)
+        self.style.configure("Primary.TButton", background=highlight_color, foreground="white")
+        
+        # Modificar colores del log
+        self.log_text.configure(bg="#FCFCFC", fg=fg_color, insertbackground=fg_color)
+        
+        # Actualizar colores de tags de log
+        self.log_text.tag_configure("INFO", foreground="#000000")
+        self.log_text.tag_configure("DEBUG", foreground="#666666")
+        self.log_text.tag_configure("WARNING", foreground="#FF8800")
+        self.log_text.tag_configure("ERROR", foreground="#FF0000")
+
+
+
+
+
+    def _create_main_layout(self):
+            """Crea el layout principal de la aplicación con paneles separados"""
+            # Frame principal para todo el contenido
+            self.main_frame = ttk.Frame(self.root)
+            self.main_frame.grid(row=0, column=0, sticky="nsew")
+            self.root.grid_rowconfigure(0, weight=1)
+            self.root.grid_columnconfigure(0, weight=1)
+            
+            # Configurar el layout del frame principal
+            self.main_frame.grid_rowconfigure(0, weight=0)  # Header (altura fija)
+            self.main_frame.grid_rowconfigure(1, weight=1)  # Contenido (expandible)
+            self.main_frame.grid_rowconfigure(2, weight=0)  # Footer (altura fija)
+            self.main_frame.grid_columnconfigure(0, weight=1)
+            
+            # Panel de cabecera
+            self.header_frame = ttk.Frame(self.main_frame, style="Card.TFrame", padding=5)
+            self.header_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+            
+            # Marco contenedor para paneles laterales (soporta redimensionamiento)
+            self.content_frame = ttk.Frame(self.main_frame)
+            self.content_frame.grid(row=1, column=0, sticky="nsew", padx=5)
+            self.content_frame.grid_columnconfigure(0, weight=2)  # Panel izquierdo
+            self.content_frame.grid_columnconfigure(1, weight=3)  # Panel derecho
+            self.content_frame.grid_rowconfigure(0, weight=1)
+            
+            # Panel izquierdo (configuración y controles)
+            self.left_panel = ttk.Frame(self.content_frame, style="Card.TFrame")
+            self.left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=0)
+            
+            # Panel derecho (log y resultados)
+            self.right_panel = ttk.Frame(self.content_frame, style="Card.TFrame")
+            self.right_panel.grid(row=0, column=1, sticky="nsew", padx=(2, 0), pady=0)
+            
+            # Panel de pie de página
+            self.footer_frame = ttk.Frame(self.main_frame, padding=5)
+            self.footer_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+    
+    def _create_header(self):
+        """Crea la sección de cabecera con logo y título"""
+        # Configuración de columnas para el header
+        self.header_frame.grid_columnconfigure(0, weight=0)  # Logo (fijo)
+        self.header_frame.grid_columnconfigure(1, weight=1)  # Título (expandible)
+        self.header_frame.grid_columnconfigure(2, weight=0)  # Botones (fijo)
+        
+        # Logo si PIL está disponible
+        if PIL_AVAILABLE:
+            logo_path = os.path.join("assets", "logo.png")
+            if os.path.exists(logo_path):
                 try:
-                    # Intentar cargar un logo de SAP o un ícono apropiado
-                    logo_path = os.path.join(os.path.dirname(__file__), "..", "assets", "sap_logo.png")
-                    if os.path.exists(logo_path):
-                        logo_image = Image.open(logo_path)
-                        logo_photo = ImageTk.PhotoImage(logo_image)
-                        
-                        # Añadir logo a la cabecera
-                        logo_label = tk.Label(self.header_frame, image=logo_photo, bg=SAP_COLORS["light"])
-                        logo_label.image = logo_photo  # Mantener referencia
-                        logo_label.pack(side=tk.LEFT, padx=(0, 10))
+                    # Usar Image.LANCZOS si está disponible, sino usar Image.ANTIALIAS
+                    resample_method = getattr(Image, 'LANCZOS', Image.ANTIALIAS)
+                    
+                    logo_img = Image.open(logo_path)
+                    logo_img = logo_img.resize((32, 32), resample_method)
+                    logo_tk = ImageTk.PhotoImage(logo_img)
+                    
+                    # Guardar referencia a la imagen para evitar que la recolecte el GC
+                    if not hasattr(self.controller, 'image_cache'):
+                        self.controller.image_cache = {}
+                    self.controller.image_cache["logo"] = logo_tk
+                    
+                    logo_label = ttk.Label(self.header_frame, image=logo_tk)
+                    logo_label.grid(row=0, column=0, padx=(0, 10))
                 except Exception as e:
-                    logger.debug(f"No se pudo cargar el logo: {e}")
-            
-            # Título con fondo de alto contraste
-            title_background = "#0A3D6E"  # Azul oscuro
-            title_foreground = "#FFFFFF"  # Texto blanco
-            
-            title_label = tk.Label(
-                self.header_frame, 
-                text="Extractor de Recomendaciones SAP",
-                font=("Arial", 18, "bold"),
-                foreground=title_foreground,
-                background=title_background,
-                padx=12,
-                pady=8
-            )
-            title_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        except Exception as e:
-            logger.error(f"Error al crear panel de cabecera: {e}")
-            
-    def _create_content_frame(self):
-        """Crea el marco principal de contenido dividido en paneles"""
-        content_frame = ttk.Frame(self.main_frame)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+                    logger.debug(f"Error al cargar logo: {e}")
         
-        # Panel izquierdo para configuración
-        self.left_panel = ttk.Frame(content_frame, padding=10, width=500)
-        self.left_panel.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10), expand=True)
+        # Título y subtítulo
+        title_frame = ttk.Frame(self.header_frame)
+        title_frame.grid(row=0, column=1, sticky="w")
         
-        # Crear secciones del panel izquierdo
-        self._create_client_panel()
-        self._create_project_panel()
-        self._create_browser_panel()
-        self._create_excel_panel()
-        self._create_action_panel()
+        title_label = ttk.Label(title_frame, text="SAP Issues Extractor", font=self.header_font)
+        title_label.grid(row=0, column=0, sticky="w")
         
-        # Panel derecho para logs
-        right_panel = ttk.Frame(content_frame, padding=10, width=400)
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        subtitle_label = ttk.Label(title_frame, text="Extracción automática de issues desde SAP Fiori")
+        subtitle_label.grid(row=1, column=0, sticky="w")
         
-        # Log frame
-        self._create_log_panel(right_panel)
+        # Botones de cabecera
+        buttons_frame = ttk.Frame(self.header_frame)
+        buttons_frame.grid(row=0, column=2, sticky="e")
         
-    def _create_client_panel(self):
-        """Crea el panel de selección de cliente"""
-        try:
-            client_frame = tk.LabelFrame(
-                self.left_panel, 
-                text="Cliente", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"),
-                padx=10, pady=10
-            )
-            client_frame.pack(fill=tk.X, pady=(0, 10))
-            
-            # Grid para organizar los elementos
-            client_frame.columnconfigure(1, weight=1)  # La segunda columna se expandirá
-            
-            # Etiqueta ERP
-            tk.Label(
-                client_frame, 
-                text="ERP Number:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 9)
-            ).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Entry ERP
-            self.extractor.client_var = tk.StringVar(value="1025541")
-            client_entry = tk.Entry(
-                client_frame, 
-                textvariable=self.extractor.client_var,
-                width=15,
-                font=("Arial", 10),
-                bg="white",
-                fg="black",
-                highlightbackground=SAP_COLORS["primary"],
-                highlightcolor=SAP_COLORS["primary"]
-            )
-            client_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            
-            # Etiqueta de clientes guardados
-            tk.Label(
-                client_frame, 
-                text="Clientes guardados:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 9)
-            ).grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Lista desplegable de clientes guardados
-            client_list = self.extractor.db_manager.get_clients()
-            self.extractor.client_combo = ttk.Combobox(client_frame, values=client_list, width=30)
-            self.extractor.client_combo.config(state='readonly')
-            self.extractor.client_combo.grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
-            self.extractor.client_combo.bind("<<ComboboxSelected>>", lambda e: self.extractor.select_client(self.extractor.client_combo.get()))
+        # Botón de modo compacto
+        self.compact_button = ttk.Button(buttons_frame, text="📏", width=3,
+                                        command=lambda: self.toggle_compact_mode())
+        self.compact_button.grid(row=0, column=0, padx=(0, 5))
         
-        except Exception as e:
-            logger.error(f"Error al crear panel de cliente: {e}")
-            
-    def _create_project_panel(self):
-        """Crea el panel de selección de proyecto"""
-        try:
-            project_frame = tk.LabelFrame(
-                self.left_panel, 
-                text="Proyecto", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"),
-                padx=10, pady=10
-            )
-            project_frame.pack(fill=tk.X, pady=(0, 10))
-            
-            # Grid para organizar los elementos
-            project_frame.columnconfigure(1, weight=1)  # La segunda columna se expandirá
-            
-            # Etiqueta ID
-            tk.Label(
-                project_frame, 
-                text="ID Proyecto:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 10)
-            ).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Entry Proyecto
-            self.extractor.project_var = tk.StringVar(value="20096444")
-            project_entry = tk.Entry(
-                project_frame, 
-                textvariable=self.extractor.project_var,
-                width=15,
-                font=("Arial", 10),
-                bg="white",
-                fg="black",
-                highlightbackground=SAP_COLORS["primary"],
-                highlightcolor=SAP_COLORS["primary"]
-            )
-            project_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            
-            # Etiqueta de proyectos
-            tk.Label(
-                project_frame, 
-                text="Proyectos:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 10)
-            ).grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Lista desplegable de proyectos guardados
-            project_list = self.extractor.db_manager.get_projects("1025541")
-            self.extractor.project_combo = ttk.Combobox(project_frame, values=project_list, width=30)
-            self.extractor.project_combo.config(state='readonly')
-            self.extractor.project_combo.grid(row=1, column=1, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
-            self.extractor.project_combo.bind("<<ComboboxSelected>>", lambda e: self.extractor.select_project(self.extractor.project_combo.get()))
+        # Botón de tema
+        self.theme_button = ttk.Button(buttons_frame, text="🎨", width=3,
+                                       command=self.toggle_theme)
+        self.theme_button.grid(row=0, column=1, padx=(0, 5))
         
-        except Exception as e:
-            logger.error(f"Error al crear panel de proyecto: {e}")
+        # Botón de ayuda
+        help_button = ttk.Button(buttons_frame, text="❓", width=3,
+                                command=self.show_help)
+        help_button.grid(row=0, column=2)
+        
+        
+        
+        
+        
+        
+    def _create_left_panel(self):
+            """Crea el panel izquierdo con configuración y controles"""
+            # Configurar el panel izquierdo para organización vertical
+            self.left_panel.grid_columnconfigure(0, weight=1)
             
-    def _create_browser_panel(self):
-        """Crea el panel de control del navegador"""
-        try:
-            browser_frame = tk.LabelFrame(
-                self.left_panel, 
-                text="Navegador", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"),
-                padx=10, pady=10
-            )
-            browser_frame.pack(fill=tk.X, pady=(0, 10))
+            # Sección de archivo Excel
+            excel_section_frame = self._create_collapsible_section(
+                self.left_panel, "Archivo Excel", 0, can_collapse=False)
             
-            # Etiqueta de navegador
-            browser_label = tk.Label(
-                browser_frame, 
-                text="Iniciar un navegador con perfil dedicado:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 10),
-                anchor="w",
-                justify="left"
-            )
-            browser_label.pack(fill=tk.X, pady=(0, 5))
+            # Indicador de archivo Excel seleccionado
+            excel_file_frame = ttk.Frame(excel_section_frame)
+            excel_file_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+            excel_file_frame.grid_columnconfigure(0, weight=1)
             
-            # Botón de navegador
-            browser_button = tk.Button(
-                browser_frame, 
-                text="Iniciar Navegador",
-                command=self.extractor.start_browser,
-                bg=SAP_COLORS["primary"],
-                fg="#FFFFFF",
-                activebackground="#0A3D6E",
-                activeforeground="#FFFFFF",
-                font=("Arial", 10, "bold"),
-                padx=10, pady=5
-            )
-            browser_button.pack(fill=tk.X, pady=5)
+            excel_file_label = ttk.Label(excel_file_frame, 
+                                        textvariable=self.controller.excel_filename_var,
+                                        wraplength=300, justify="left")
+            excel_file_label.grid(row=1, column=0, sticky="w", columnspan=2)
             
-            # Guardar referencia al botón para acceso desde otras funciones
-            self.browser_button = browser_button
+            # Botón para seleccionar archivo Excel
+            excel_file_button = tk.Button(excel_file_frame, text="Seleccionar",
+                                          bg= "#1F4E78", fg="white",
+                                          command=self.controller.choose_excel_file)
+            excel_file_button.grid(row=0, column=1, padx=(5, 0))
             
-        except Exception as e:
-            logger.error(f"Error al crear panel de navegador: {e}")
+            # Separador
+            ttk.Separator(self.left_panel, orient="horizontal").grid(
+                row=1, column=0, sticky="ew", pady=5)
             
-    def _create_excel_panel(self):
-        """Crea el panel de selección y gestión de Excel"""
-        try:
-            excel_frame = tk.LabelFrame(
-                self.left_panel, 
-                text="Archivo Excel", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"),
-                padx=10, pady=10
-            )
-            excel_frame.pack(fill=tk.X, pady=(0, 10))
+            # Sección de Cliente y Proyecto
+            client_section_frame = self._create_collapsible_section(
+                self.left_panel, "Cliente y Proyecto", 2, can_collapse=False)
             
-            # Etiqueta de Excel
-            excel_label = tk.Label(
-                excel_frame, 
-                text="Seleccione un archivo existente o cree uno nuevo:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 10),
-                anchor="w",
-                justify="left"
-            )
-            excel_label.pack(fill=tk.X, pady=(0, 5))
+            # Frame para cliente
+            client_frame = ttk.Frame(client_section_frame)
+            client_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+            client_frame.grid_columnconfigure(1, weight=1)
             
-            # Botón de Excel
-            excel_button = tk.Button(
-                excel_frame, 
-                text="Seleccionar o Crear Excel",
-                command=self.extractor.choose_excel_file,
-                bg=SAP_COLORS["success"],
-                fg="#FFFFFF",
-                activebackground="#085E2E",
-                activeforeground="#FFFFFF",
-                font=("Arial", 10, "bold"),
-                padx=10, pady=5
-            )
-            excel_button.pack(fill=tk.X, pady=5)
+            # Etiqueta y entrada para Cliente
+            ttk.Label(client_frame, text="Cliente:").grid(row=0, column=0, sticky="w", padx=(0, 5))
             
-            # Guardar referencia al botón para acceso desde otras funciones
-            self.excel_button = excel_button
+            # Combo editable para selección de cliente
+            self.client_combo = ttk.Combobox(client_frame, 
+                                        textvariable=self.controller.client_var,
+                                        state="readonly", width=25)
+            self.client_combo.grid(row=0, column=1, sticky="ew", pady=2)
             
-            # Mostrar el nombre del archivo seleccionado
-            excel_file_label = tk.Label(
-                excel_frame, 
-                textvariable=self.excel_filename_var,
-                bg=SAP_COLORS["light"],
-                fg="#0A3D6E",
-                font=("Arial", 9, "bold"),
-                wraplength=300,
-                anchor="w",
-                justify="left"
-            )
-            excel_file_label.pack(fill=tk.X, pady=5)
+            # Obtener y configurar lista de clientes
+            clients = self.controller.db_manager.get_clients()
+            self.client_combo['values'] = clients
             
-        except Exception as e:
-            logger.error(f"Error al crear panel de Excel: {e}")
+            # Seleccionar el primer cliente si hay alguno
+            if clients:
+                self.client_combo.current(0)
+                self.controller.select_client(clients[0])
             
-    def _create_action_panel(self):
-        """Crea el panel de acciones principales"""
-        try:
-            action_frame = tk.LabelFrame(
-                self.left_panel, 
-                text="Acciones", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"),
-                padx=10, pady=10
-            )
-            action_frame.pack(fill=tk.X, pady=(0, 10))
+            # Frame para proyecto
+            project_frame = ttk.Frame(client_section_frame)
+            project_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
+            project_frame.grid_columnconfigure(1, weight=1)
             
-            # Etiqueta de acción
-            action_label = tk.Label(
-                action_frame, 
-                text="Extraer datos de issues desde SAP:",
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 10),
-                anchor="w",
-                justify="left"
-            )
-            action_label.pack(fill=tk.X, pady=(0, 5))
+            # Etiqueta y entrada para Proyecto
+            ttk.Label(project_frame, text="Proyecto:").grid(row=0, column=0, sticky="w", padx=(0, 5))
             
-            # Botón de extracción
-            extract_button = tk.Button(
-                action_frame, 
-                text="Iniciar Extracción de Issues",
-                command=self.extractor.start_extraction,
-                bg=SAP_COLORS["warning"],
-                fg="#FFFFFF",
-                activebackground="#C25A00",
-                activeforeground="#FFFFFF",
-                font=("Arial", 10, "bold"),
-                padx=10, pady=5
-            )
-            extract_button.pack(fill=tk.X, pady=5)
+            # Combo editable para selección de proyecto
+            self.project_combo = ttk.Combobox(project_frame, 
+                                        textvariable=self.controller.project_var,
+                                        state="readonly", width=25)
+            self.project_combo.grid(row=0, column=1, sticky="ew", pady=2)
             
-            # Guardar referencia al botón para acceso desde otras funciones
-            self.extract_button = extract_button
+            # Separador
+            ttk.Separator(self.left_panel, orient="horizontal").grid(
+                row=3, column=0, sticky="ew", pady=5)
             
-            # Separador visual
-            separator = tk.Frame(action_frame, height=2, bg=SAP_COLORS["gray"])
-            separator.pack(fill=tk.X, pady=10)
+            # Sección de Acciones
+            actions_section_frame = self._create_collapsible_section(
+                self.left_panel, "Acciones", 4, can_collapse=False)
             
-            # Botón de salir
-            exit_button = tk.Button(
-                action_frame, 
-                text="Salir de la Aplicación",
-                command=self.extractor.exit_app,
-                bg=SAP_COLORS["danger"],
-                fg="#FFFFFF",
-                activebackground="#990000",
-                activeforeground="#FFFFFF",
-                font=("Arial", 10, "bold"),
-                padx=10, pady=5
-            )
-            exit_button.pack(fill=tk.X, pady=5)
+            # Frame para botones principales
+            buttons_frame = ttk.Frame(actions_section_frame)
+            buttons_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+            buttons_frame.grid_columnconfigure(0, weight=1)
+            buttons_frame.grid_columnconfigure(1, weight=1)
             
-            # Guardar referencia al botón para acceso desde otras funciones
-            self.exit_button = exit_button
+            # Botón para iniciar navegador
+            start_browser_btn = tk.Button(buttons_frame, text="Iniciar Navegador", 
+                                        bg ="#1F4E78", fg="White", 
+                                        font=("Segoe UI", 9, "bold"),
+                                        width=18, height=2,
+                                        command=self.controller.start_browser)
+            start_browser_btn.grid(row=0, column=0, sticky="ew", padx=(0, 5), pady=8)
             
-        except Exception as e:
-            logger.error(f"Error al crear panel de acciones: {e}")
+            # Botón para iniciar extracción
+            extract_btn = tk.Button(buttons_frame, text="Iniciar Extracción", 
+                                    bg ="#1F4E78", fg="White", 
+                                    font=("Segoe UI", 9, "bold"),
+                                    width=18, height=2,
+                                command=self.controller.start_extraction)
+            extract_btn.grid(row=0, column=1, sticky="ew", padx=(5, 0), pady=8)
             
-    def _create_log_panel(self, parent_frame):
-        """Crea el panel de registro de actividad (logs)"""
-        try:
-            log_frame = tk.LabelFrame(
-                parent_frame, 
-                text="Registro de Actividad", 
-                bg=SAP_COLORS["light"],
-                fg="#000000",
-                font=("Arial", 11, "bold"))
-            log_frame.pack(fill=tk.BOTH, expand=True)
+            # Botón para abrir Excel
+            open_excel_btn = ttk.Button(buttons_frame, text="Abrir Excel", width=15,
+                                    command=lambda: self.controller.excel_manager.open_excel_file())
+            open_excel_btn.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 5))
             
-            # Text widget para logs
-            self.extractor.log_text = tk.Text(
-                log_frame, 
-                height=20, 
-                wrap=tk.WORD, 
-                bg="white",
-                fg="black",
-                font=("Consolas", 9),
-                padx=5,
-                pady=5,
-                borderwidth=2,
-                relief=tk.SUNKEN
-            )
-            self.extractor.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            # Botón para salir
+            exit_btn = ttk.Button(buttons_frame, text="Salir", width=15,
+                                command=self.controller.exit_app)
+            exit_btn.grid(row=2, column=0, columnspan=2, sticky="ew")
             
-            # Colores para los logs
-            self.extractor.log_text.tag_configure("INFO", foreground="black")
-            self.extractor.log_text.tag_configure("WARNING", foreground="#CC6600")
-            self.extractor.log_text.tag_configure("ERROR", foreground="#990000")
-            self.extractor.log_text.tag_configure("DEBUG", foreground="#555555")
+            # Añadir espacio para empujar elementos hacia arriba
+            spacer = ttk.Frame(self.left_panel)
+            spacer.grid(row=5, column=0, sticky="ew", pady=10)
+            self.left_panel.grid_rowconfigure(5, weight=1)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    def _create_right_panel(self):
+            """Crea el panel derecho con el registro de actividad y resultados"""
+            # Configurar panel para organización vertical
+            self.right_panel.grid_rowconfigure(1, weight=1)  # Log expandible
+            self.right_panel.grid_columnconfigure(0, weight=1)
             
-            # Scrollbar para el log
-            scrollbar = ttk.Scrollbar(log_frame, command=self.extractor.log_text.yview)
-            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            self.extractor.log_text.config(yscrollcommand=scrollbar.set)
+            # Sección de Estado
+            status_section_frame = self._create_collapsible_section(
+                self.right_panel, "Estado", 0, can_collapse=False)
             
-            # Configurar logger para GUI
-            setup_gui_logger(logger, self.extractor.log_text)
+            # Etiqueta de estado
+            status_frame = ttk.Frame(status_section_frame)
+            status_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+            status_frame.grid_columnconfigure(0, weight=1)
             
-        except Exception as e:
-            logger.error(f"Error al crear panel de logs: {e}")
+            self.status_label = ttk.Label(status_frame, textvariable=self.controller.status_var,
+                                        wraplength=400, justify="left")
+            self.status_label.grid(row=0, column=0, sticky="w")
             
-    def _create_status_bar(self):
-        """Crea la barra de estado en la parte inferior de la ventana"""
-        try:
-            status_bar = tk.Label(
-                self.root, 
-                textvariable=self.status_var,
-                fg="#000000",
-                bg="#F0F0F0",
-                relief=tk.SUNKEN, 
-                anchor=tk.W, 
-                padx=5,
-                pady=2,
-                font=("Arial", 10)
-            )
-            status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+            # Barra de progreso
+            self.progress_bar = ttk.Progressbar(status_frame, mode="indeterminate", length=100)
+            self.progress_bar.grid(row=1, column=0, sticky="ew", pady=(5, 0))
             
-        except Exception as e:
-            logger.error(f"Error al crear barra de estado: {e}")
+            # Sección de log con barra de desplazamiento
+            log_section_frame = self._create_collapsible_section(
+                self.right_panel, "Registro de Actividad", 1, 
+                can_collapse=True, collapsed_key="log")
             
-    def _setup_tab_order(self):
-        """Configura el orden de tabulación entre controles"""
-        try:
-            # Obtener todos los widgets que admiten foco
-            widgets = [
-                # Campos de entrada
-                self.extractor.client_var,
-                self.extractor.client_combo,
-                self.extractor.project_var,
-                self.extractor.project_combo,
+            # Frame para el log con scrollbar
+            log_container = ttk.Frame(log_section_frame)
+            log_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+            log_container.grid_rowconfigure(0, weight=1)
+            log_container.grid_columnconfigure(0, weight=1)
+            
+            # Asegurarse de que la sección de log pueda expandirse
+            log_section_frame.grid_rowconfigure(0, weight=1)
+            log_section_frame.grid_columnconfigure(0, weight=1)
+            
+            # Text widget para mostrar log con scrollbar
+            self.log_text = tk.Text(log_container, wrap="word", height=10, 
+                                font=("Consolas", 9), bg="#F8F8F8", relief="flat")
+            self.log_text.grid(row=0, column=0, sticky="nsew")
+            
+            # Scrollbar vertical
+            log_scrollbar = ttk.Scrollbar(log_container, orient="vertical", 
+                                        command=self.log_text.yview)
+            log_scrollbar.grid(row=0, column=1, sticky="ns")
+            self.log_text.config(yscrollcommand=log_scrollbar.set)
+            
+            # Configurar tags para colores de log
+            self.log_text.tag_configure("INFO", foreground="#000000")
+            self.log_text.tag_configure("DEBUG", foreground="#666666")
+            self.log_text.tag_configure("WARNING", foreground="#FF8800")
+            self.log_text.tag_configure("ERROR", foreground="#FF0000")
+            self.log_text.tag_configure("CRITICAL", foreground="#FF0000", background="#FFCCCC")
+    
+    def _create_footer(self):
+        """Crea la sección de pie de página con información de estado"""
+        # Configurar el footer
+        self.footer_frame.grid_columnconfigure(0, weight=1)
+        
+        # Información de estado y versión
+        footer_label = ttk.Label(self.footer_frame, 
+                              text="SAP Issues Extractor v1.0.0 - © 2025",
+                              font=self.small_font)
+        footer_label.grid(row=0, column=0, sticky="w")
+        
+        # Botón de limpieza de log en el lado derecho
+        clear_log_btn = ttk.Button(self.footer_frame, text="Limpiar Log", width=12,
+                                command=self._clear_log)
+        clear_log_btn.grid(row=0, column=1, sticky="e")
+        
+    def _create_collapsible_section(self, parent, title, row, can_collapse=True, collapsed_key=None):
+        """
+        Crea una sección plegable/desplegable
+        
+        Args:
+            parent: Widget padre
+            title: Título de la sección
+            row: Fila para colocar la sección
+            can_collapse: Si la sección puede plegarse/desplegarse
+            collapsed_key: Clave para almacenar estado de colapso
+            
+        Returns:
+            Frame: El frame del contenido de la sección
+        """
+        # Frame para la cabecera de la sección
+        header_frame = ttk.Frame(parent)
+        header_frame.grid(row=row, column=0, sticky="ew", padx=2, pady=(5, 0))
+        header_frame.grid_columnconfigure(0, weight=1)
+        
+        # Estilo de cabecera
+        section_label = ttk.Label(header_frame, text=title, style="Section.TLabel")
+        section_label.grid(row=0, column=0, sticky="ew")
+        
+        # Botón de colapso si es plegable
+        if can_collapse and collapsed_key:
+            collapse_text = "▼" if not self.collapsed_sections.get(collapsed_key, False) else "►"
+            collapse_btn = ttk.Button(header_frame, text=collapse_text, width=2,
+                                    command=lambda: self._toggle_section(collapsed_key))
+            collapse_btn.grid(row=0, column=1, sticky="e")
+            
+            # Guardar referencia al botón para actualizarlo después
+            setattr(self, f"{collapsed_key}_collapse_btn", collapse_btn)
+        
+        # Frame para el contenido
+        content_frame = ttk.Frame(parent)
+        
+        # Si la sección está colapsada, no mostrar el contenido
+        if not can_collapse or not self.collapsed_sections.get(collapsed_key, False):
+            content_frame.grid(row=row+1, column=0, sticky="nsew", padx=2, pady=(0, 5))
+            
+        # Guardar referencia al frame para mostrarlo/ocultarlo después
+        if collapsed_key:
+            setattr(self, f"{collapsed_key}_section_frame", content_frame)
+            
+        return content_frame
+        
+    def _toggle_section(self, section_key):
+        """
+        Alterna el estado plegado/desplegado de una sección
+        
+        Args:
+            section_key: Clave de la sección a alternar
+        """
+        # Invertir estado
+        self.collapsed_sections[section_key] = not self.collapsed_sections.get(section_key, False)
+        collapsed = self.collapsed_sections[section_key]
+        
+        # Obtener referencias a los widgets
+        section_frame = getattr(self, f"{section_key}_section_frame", None)
+        collapse_btn = getattr(self, f"{section_key}_collapse_btn", None)
+        
+        if section_frame and collapse_btn:
+            if collapsed:
+                # Ocultar sección
+                section_frame.grid_remove()
+                collapse_btn.configure(text="►")
+            else:
+                # Mostrar sección
+                section_frame.grid()
+                collapse_btn.configure(text="▼")
                 
-                # Botones
-                self.browser_button,
-                self.excel_button,
-                self.extract_button,
-                self.exit_button
-            ]
-            
-            # Configurar el orden de tabulación
-            for widget in widgets:
-                if hasattr(widget, 'lift'):
-                    widget.lift()  # Asegurar que el widget está en la jerarquía correcta
                 
-        except Exception as e:
-            logger.warning(f"No se pudo configurar el orden de tabulación: {e}")
+                
+                
+                
+                
+                
+                
+    def _create_context_menu(self):
+            """Crea el menú contextual para el log"""
+            self.context_menu = tk.Menu(self.root, tearoff=0)
+            self.context_menu.add_command(label="Copiar", command=self._copy_log)
+            self.context_menu.add_command(label="Guardar Log", command=self._save_log)
+            self.context_menu.add_separator()
+            self.context_menu.add_command(label="Limpiar", command=self._clear_log)
             
-    def _center_window(self):
-        """Centra la ventana de la aplicación en la pantalla"""
+            # Bindear el botón derecho al log
+            self.log_text.bind("<Button-3>", self._show_context_menu)
+        
+    def _show_context_menu(self, event):
+        """Muestra el menú contextual en la posición del ratón"""
+        self.context_menu.post(event.x_root, event.y_root)
+        
+    def _copy_log(self):
+        """Copia el contenido seleccionado del log al portapapeles"""
         try:
-            # Actualizar la información de geometría
-            self.root.update_idletasks()
+            # Si hay texto seleccionado, copiar solo eso
+            selected_text = self.log_text.get("sel.first", "sel.last")
+            self.root.clipboard_clear()
+            self.root.clipboard_append(selected_text)
+        except tk.TclError:
+            # Si no hay selección, copiar todo
+            all_text = self.log_text.get("1.0", "end-1c")
+            self.root.clipboard_clear()
+            self.root.clipboard_append(all_text)
             
-            # Obtener dimensiones de la pantalla
-            screen_width = self.root.winfo_screenwidth()
-            screen_height = self.root.winfo_screenheight()
-            
-            # Obtener dimensiones de la ventana
-            window_width = self.root.winfo_width()
-            window_height = self.root.winfo_height()
-            
-            # Calcular posición para centrar
-            x = int((screen_width - window_width) / 2)
-            y = int((screen_height - window_height) / 2)
-            
-            # Establecer geometría
-            self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
-            
-        except Exception as e:
-            logger.warning(f"No se pudo centrar la ventana: {e}")
-            
-    def setup_shortcuts(self):
-        """Configura atajos de teclado para las funciones principales"""
+    def _save_log(self):
+        """Guarda el contenido del log a un archivo"""
         try:
-            # Definir atajos de teclado
-            self.root.bind("<Control-q>", lambda e: self.on_closing())
-            self.root.bind("<Control-b>", lambda e: self.extractor.start_browser())
-            self.root.bind("<Control-e>", lambda e: self.extractor.choose_excel_file())
-            self.root.bind("<F5>", lambda e: self.extractor.start_extraction())
+            # Obtener nombre de archivo para guardar
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".log",
+                filetypes=[("Archivos de log", "*.log"), ("Archivos de texto", "*.txt"), ("Todos los archivos", "*.*")],
+                title="Guardar archivo de log"
+            )
             
+            if file_path:
+                # Obtener todo el texto y guardar
+                log_content = self.log_text.get("1.0", "end-1c")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(log_content)
+                messagebox.showinfo("Guardar Log", f"Log guardado correctamente en:\n{file_path}")
         except Exception as e:
-            logger.warning(f"No se pudieron configurar los atajos de teclado: {e}")
+            messagebox.showerror("Error", f"Error al guardar log: {e}")
             
-    def on_closing(self):
-        """Maneja el evento de cierre de la ventana"""
-        try:
-            self.extractor.exit_app()
-        except Exception as e:
-            logger.error(f"Error al cerrar la aplicación: {e}")
-            # En caso de error, cerrar forzadamente
-            self.root.destroy()
+    def _clear_log(self):
+        """Limpia el contenido del log"""
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.configure(state="disabled")
+    
+    def _connect_signals(self):
+        """Conecta señales y eventos de los widgets"""
+        # Conectar cambio de cliente
+        self.client_combo.bind("<<ComboboxSelected>>", 
+                            lambda e: self.controller.select_client(self.client_combo.get()))
+        
+        # Conectar cambio de proyecto
+        self.project_combo.bind("<<ComboboxSelected>>", 
+                             lambda e: self.controller.select_project(self.project_combo.get()))
+        
+        # Verificar periódicamente el estado de procesamiento
+        self._check_processing_state()
+        
+        # Detectar tamaño de ventana
+        self.root.bind("<Configure>", self._on_window_resize)
+        
+    def _check_processing_state(self):
+        """
+        Actualiza la interfaz basada en el estado de procesamiento,
+        como la barra de progreso y botones
+        """
+        if hasattr(self.controller, 'processing') and self.controller.processing:
+            # Si está procesando, mostrar y activar la barra de progreso
+            self.progress_bar.grid()
+            self.progress_bar.start(10)
+        else:
+            # Si no está procesando, detener y ocultar la barra
+            self.progress_bar.stop()
+            self.progress_bar.grid_remove()
             
-    def show_about(self):
-        """Muestra el diálogo Acerca de"""
-        try:
-            about_dialog = AboutDialog(self.root)
-            about_dialog.show()
-        except Exception as e:
-            logger.error(f"Error al mostrar diálogo Acerca de: {e}")
-            messagebox.showinfo("Acerca de", "SAP Issues Extractor\nVersión 2.0\n\nUna herramienta para extraer issues de SAP")
+        # Programar la siguiente verificación
+        self.root.after(100, self._check_processing_state)
+        
+    def _on_window_resize(self, event):
+        """Maneja el evento de redimensionamiento de la ventana"""
+        # Solo procesar eventos de la ventana principal, no de sub-widgets
+        if event.widget == self.root:
+            # Si la altura es menor a 600px, cambiar a modo compacto
+            if event.height < 600 and not self.compact_mode:
+                self.toggle_compact_mode(True)
+            # Si la altura es mayor a 700px, cambiar a modo normal
+            elif event.height > 700 and self.compact_mode:
+                self.toggle_compact_mode(False)
+                
+    def toggle_compact_mode(self, force_state=None):
+        """
+        Alterna entre modo compacto y normal para adaptarse a pantallas pequeñas
+        
+        Args:
+            force_state: Si se proporciona, fuerza el modo específico (True=compacto, False=normal)
+        """
+        # Determinar nuevo estado
+        if force_state is not None:
+            self.compact_mode = force_state
+        else:
+            self.compact_mode = not self.compact_mode
             
-    def show_settings(self):
-        """Muestra el diálogo de Configuración"""
-        try:
-            settings_dialog = SettingsDialog(self.root, self.extractor)
-            settings_dialog.show()
-        except Exception as e:
-            logger.error(f"Error al mostrar diálogo de Configuración: {e}")
-            messagebox.showinfo("Configuración", "No se pudo abrir la ventana de configuración")
+        if self.compact_mode:
+            # Modo compacto: ocultar elementos no esenciales y reducir espacios
+            self.compact_button.configure(text="📐")  # Cambiar icono a expandir
+            
+            # Ajustar fuentes y padding
+            self.default_font.configure(size=8)
+            self.header_font.configure(size=10)
+            self.small_font.configure(size=7)
+            self.button_font.configure(size=8)
+            
+            # Colapsar secciones no esenciales
+            if not self.collapsed_sections.get("log", False):
+                self._toggle_section("log")
+                
+            # Reducir altura del log
+            self.log_text.configure(height=6)
+            
+            # Ajustar paddings
+            for widget in [self.header_frame, self.left_panel, self.right_panel, self.footer_frame]:
+                if hasattr(widget, 'configure'):
+                    widget.configure(padding=2)
+        else:
+            # Modo normal: mostrar todos los elementos y restaurar espacios
+            self.compact_button.configure(text="📏")  # Cambiar icono a compactar
+            
+            # Restaurar fuentes y padding
+            self.default_font.configure(size=9)
+            self.header_font.configure(size=12)
+            self.small_font.configure(size=8)
+            self.button_font.configure(size=9)
+            
+            # Expandir secciones colapsadas
+            if self.collapsed_sections.get("log", False):
+                self._toggle_section("log")
+                
+            # Restaurar altura del log
+            self.log_text.configure(height=10)
+            
+            # Restaurar paddings
+            self.header_frame.configure(padding=5)
+            self.footer_frame.configure(padding=5)
+        
+        # Actualizar estilos
+        self._setup_styles()
+        
+    def toggle_theme(self):
+        """Alterna entre temas disponibles"""
+        themes = ["sap", "light", "dark"]
+        current_index = themes.index(self.current_theme) if self.current_theme in themes else 0
+        next_index = (current_index + 1) % len(themes)
+        self.current_theme = themes[next_index]
+        
+        if self.current_theme == "sap":
+            self._apply_sap_theme()
+            self.theme_button.configure(text="🔵")  # Icono para tema SAP
+        elif self.current_theme == "light":
+            self._apply_light_theme()
+            self.theme_button.configure(text="☀️")  # Icono para tema claro
+        else:
+            self._apply_dark_theme()
+            self.theme_button.configure(text="🌙")  # Icono para tema oscuro
+    
+    def _apply_light_theme(self):
+        """Aplica el tema claro a la interfaz"""
+        # Colores del tema claro
+        bg_color = "#FFFFFF"
+        fg_color = "#000000"
+        section_bg = "#F0F0F0"
+        card_border = "#DDDDDD"
+        highlight_color = "#3498DB"  # Azul más genérico
+        
+        # Aplicar tema a los widgets principales
+        self.style.configure("TFrame", background=bg_color)
+        self.style.configure("Card.TFrame", background=bg_color, borderwidth=1, relief="solid")
+        self.style.configure("TLabel", background=bg_color, foreground=fg_color)
+        self.style.configure("Section.TLabel", background=section_bg, foreground=fg_color)
+        self.style.configure("TButton", background=bg_color)
+        self.style.configure("Primary.TButton", background=highlight_color, foreground="white")
+        
+        # Modificar colores del log
+        self.log_text.configure(bg="#FCFCFC", fg=fg_color, insertbackground=fg_color)
+        
+        # Actualizar colores de tags de log
+        self.log_text.tag_configure("INFO", foreground="#000000")
+        self.log_text.tag_configure("DEBUG", foreground="#666666")
+        self.log_text.tag_configure("WARNING", foreground="#FF8800")
+        self.log_text.tag_configure("ERROR", foreground="#FF0000")
+        
+    def _apply_dark_theme(self):
+        """Aplica el tema oscuro a la interfaz"""
+        # Colores del tema oscuro
+        bg_color = "#222222"
+        fg_color = "#EEEEEE"
+        section_bg = "#333333"
+        card_border = "#444444"
+        highlight_color = "#3A7CB8"
+        
+        # Aplicar tema a los widgets principales
+        self.style.configure("TFrame", background=bg_color)
+        self.style.configure("Card.TFrame", background=bg_color, borderwidth=1, relief="solid")
+        self.style.configure("TLabel", background=bg_color, foreground=fg_color)
+        self.style.configure("Section.TLabel", background=section_bg, foreground=fg_color)
+        self.style.configure("TButton", background=bg_color)
+        self.style.configure("Primary.TButton", background=highlight_color, foreground="white")
+        
+        # Modificar colores del log
+        self.log_text.configure(bg="#333333", fg=fg_color, insertbackground=fg_color)
+        
+        # Actualizar colores de tags de log
+        self.log_text.tag_configure("INFO", foreground="#CCCCCC")
+        self.log_text.tag_configure("DEBUG", foreground="#999999")
+        self.log_text.tag_configure("WARNING", foreground="#FFBB33")
+        self.log_text.tag_configure("ERROR", foreground="#FF6666")
+        
+    def show_help(self):
+        """Muestra ventana de ayuda con instrucciones básicas"""
+        help_text = """
+SAP Issues Extractor - Ayuda Rápida
+
+1. Seleccione un archivo Excel para guardar los datos
+2. Elija un cliente y proyecto de la lista desplegable
+3. Haga clic en "Iniciar Navegador" para abrir Chrome
+4. Una vez cargado SAP, haga clic en "Iniciar Extracción"
+5. Siga las indicaciones que aparezcan durante el proceso
+6. Al finalizar, los datos se guardarán en el archivo Excel
+
+Para ver los datos extraídos, haga clic en "Abrir Excel".
+
+Para adaptar la interfaz a pantallas pequeñas:
+- Use el botón 📏 para cambiar al modo compacto
+- Colapse secciones con el botón ▼
+
+Para más información, consulte la documentación completa.
+        """
+        
+        messagebox.showinfo("Ayuda - SAP Issues Extractor", help_text.strip())

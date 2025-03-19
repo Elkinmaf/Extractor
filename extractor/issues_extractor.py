@@ -23,6 +23,7 @@ import threading
 import json
 import logging
 import base64
+import sqlite3
 from io import BytesIO
 from datetime import datetime
 from selenium.webdriver.common.by import By
@@ -80,6 +81,44 @@ class IssuesExtractor:
         self.db_manager = DatabaseManager()
         self.excel_manager = ExcelManager()
         self.browser = SAPBrowser()
+        
+        
+        
+        
+        
+        
+        
+    def configure_columns_after_settings(self):
+        """
+        Método auxiliar para configurar todas las columnas después de abrir el panel de ajustes.
+        Este método debe ser llamado después de hacer clic en el botón de ajustes.
+        
+        Returns:
+            bool: True si el proceso fue exitoso, False en caso contrario
+        """
+        try:
+            # Importar el módulo
+            from browser.robust_column_selection import select_all_columns
+            
+            # Ejecutar la selección de columnas
+            result = select_all_columns(self.driver)
+            
+            if result:
+                logger.info("✅ Columnas configuradas correctamente")
+            else:
+                logger.warning("❌ No se pudo completar la configuración de columnas")
+                
+            return result
+        except Exception as e:
+            logger.error(f"Error al configurar columnas: {e}")
+            return False
+        
+        
+        
+        
+        
+        
+        
         
     def choose_excel_file(self):
         """Permite al usuario elegir un archivo Excel existente o crear uno nuevo"""
@@ -327,6 +366,42 @@ class IssuesExtractor:
             
             # Esperar un momento para que se abra el panel de ajustes
             time.sleep(2)
+            
+            # ====== SELECCIÓN DE TODAS LAS COLUMNAS ======
+            # Seleccionar todas las columnas disponibles para maximizar datos extraídos
+            logger.info("Intentando seleccionar todas las columnas disponibles...")
+
+            # Actualizar la interfaz si existe
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Configurando columnas visibles...")
+                if self.root:
+                    self.root.update()
+                    
+            columns_configured = self.browser.select_all_visible_columns()
+
+            if columns_configured:
+                logger.info("✅ Columnas configuradas correctamente para extracción completa")
+                
+                # Esperar a que se recargue la tabla con las nuevas columnas
+                time.sleep(3)
+            else:
+                logger.warning("⚠️ No se pudieron configurar todas las columnas")
+                
+                # Si no se pudieron configurar automáticamente, informar al usuario
+                if self.root:
+                    messagebox.showinfo(
+                        "Configuración manual",
+                        "No se pudieron configurar todas las columnas automáticamente.\n\n"
+                        "Si es posible, seleccione manualmente 'Select All' y haga clic en OK."
+                    )
+                    time.sleep(3)  # Dar tiempo para configuración manual
+            
+            
+            
+            
+            
+            
+            
             
             # Realizar la extracción
             return self.perform_extraction()
@@ -875,32 +950,84 @@ class IssuesExtractor:
             if self.root:
                 self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Error al iniciar el navegador: {e}"))
+
+
+
+
+
+
+
     
     def _show_extraction_instructions(self):
         """
         Muestra instrucciones para la extracción después de la navegación automática
         
         Presenta un mensaje con información sobre el cliente y proyecto actuales,
-        y guía al usuario sobre los siguientes pasos.
+        incluyendo sus nombres, y guía al usuario sobre los siguientes pasos.
         """
         # Obtener valores actuales
         erp_number = self.client_var.get()
         project_id = self.project_var.get()
         
+        # Obtener nombres de cliente y proyecto desde la base de datos
+        client_name = ""
+        project_name = ""
+        
+        # Buscar el nombre del cliente
+        try:
+            conn = sqlite3.connect(self.db_manager.db_path)
+            cursor = conn.cursor()
+            
+            # Consultar nombre del cliente
+            cursor.execute("SELECT name FROM clients WHERE erp_number = ?", (erp_number,))
+            client_result = cursor.fetchone()
+            if client_result:
+                client_name = client_result[0]
+                
+            # Consultar nombre del proyecto
+            cursor.execute("SELECT name FROM projects WHERE project_id = ?", (project_id,))
+            project_result = cursor.fetchone()
+            if project_result:
+                project_name = project_result[0]
+                
+        except Exception as e:
+            logger.error(f"Error al obtener nombres de cliente/proyecto: {e}")
+        finally:
+            if conn:
+                conn.close()
+        
+        # Formatear la información con los nombres
+        client_info = f"{erp_number}"
+        if client_name:
+            client_info += f" - {client_name}"
+            
+        project_info = f"{project_id}"
+        if project_name:
+            project_info += f" - {project_name}"
+        
         instructions = f"""
         La aplicación ha navegado automáticamente a la página de SAP con:
         
-        Cliente: {erp_number}
-        Proyecto: {project_id}
+        Cliente: {client_info}
+        Proyecto: {project_info}
         
         Por favor:
-        1. Verifique que ha iniciado sesión correctamente
-        2. Compruebe que se muestran los issues del proyecto
-        3. Cuando esté listo, haga clic en 'Iniciar Extracción'
+        1. Verifica que has iniciado sesión correctamente
+        2. Comprueba que puedes ver las recomendaciones para el cliente
+        3. Cuando quieras comenzar, haz clic en 'Iniciar Extracción'
         """
         
         messagebox.showinfo("Instrucciones de Extracción", instructions)
     
+
+
+
+
+
+
+
+
+
     def start_extraction(self):
         """
         Inicia el proceso de extracción desde la interfaz gráfica
