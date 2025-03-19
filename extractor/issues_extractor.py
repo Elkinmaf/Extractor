@@ -196,9 +196,28 @@ class IssuesExtractor:
                     
                 return False
 
-            # Obtener valores de cliente y proyecto - APLICAR TRIM PARA ELIMINAR ESPACIOS
-            erp_number = self.client_var.get().strip() if hasattr(self, 'client_var') and self.client_var else ""
-            project_id = self.project_var.get().strip() if hasattr(self, 'project_var') and self.project_var else ""
+            # Obtener valores de cliente y proyecto - MODIFICADO PARA EXTRAER EL NÚMERO DE ID
+            full_client = self.client_var.get().strip() if hasattr(self, 'client_var') and self.client_var else ""
+            full_project = self.project_var.get().strip() if hasattr(self, 'project_var') and self.project_var else ""
+            
+            # Extraer solo el número de ID de las cadenas completas
+            erp_number = full_client.split(" - ")[0].strip() if " - " in full_client else full_client
+            project_id = full_project.split(" - ")[0].strip() if " - " in full_project else full_project
+
+            # Validar que tenemos valores no vacíos
+            if not erp_number:
+                logger.warning("ERP number está vacío")
+                if hasattr(self, 'root') and self.root:
+                    messagebox.showwarning("Datos incompletos", "Debe especificar un número ERP de cliente")
+                return False
+                    
+            if not project_id:
+                logger.warning("Project ID está vacío")
+                if hasattr(self, 'root') and self.root:
+                    messagebox.showwarning("Datos incompletos", "Debe especificar un ID de proyecto")
+                return False
+                                
+            logger.info(f"Iniciando extracción para cliente: {erp_number}, proyecto: {project_id}")
 
             # Validar que tenemos valores no vacíos
             if not erp_number:
@@ -818,6 +837,16 @@ class IssuesExtractor:
                     f"Error al rellenar campos: {e}"
                 ))
                 
+
+
+
+
+
+
+
+
+
+
     def select_client(self, client_string):
         """
         Maneja la selección de un cliente desde el combobox
@@ -828,14 +857,14 @@ class IssuesExtractor:
         try:
             if not client_string or len(client_string) < 3:
                 return
-                
+                    
             # Extraer el ERP number del string "1025541 - Nombre del cliente"
             parts = client_string.split(" - ")
             erp_number = parts[0].strip()
             
             # Establecer el valor en el Entry
-            self.client_var.set(erp_number)
-            logger.info(f"Cliente seleccionado: {erp_number}")
+            self.client_var.set(client_string)
+            logger.info(f"Cliente seleccionado: {client_string}")
             
             # Actualizar inmediatamente la interfaz para confirmar el cambio
             if self.root:
@@ -845,17 +874,27 @@ class IssuesExtractor:
             projects = self.db_manager.get_projects(erp_number)
             self.project_combo['values'] = projects
             
+            # Ajustar el ancho del dropdown para los proyectos
+            from ui.main_window import adjust_combobox_dropdown_width
+            adjust_combobox_dropdown_width(self.project_combo)
+            
             # Si hay proyectos disponibles, seleccionar el primero
             if projects:
                 self.project_combo.current(0)
                 self.select_project(projects[0])
-                    
+                        
             # Actualizar el uso de este cliente
             self.db_manager.update_client_usage(erp_number)
             self.save_config()
         except Exception as e:
             logger.error(f"Error al seleccionar cliente: {e}")
-            
+        
+        
+        
+        
+        
+        
+                    
     def select_project(self, project_string):
         """
         Maneja la selección de un proyecto desde el combobox
@@ -866,14 +905,15 @@ class IssuesExtractor:
         try:
             if not project_string or len(project_string) < 3:
                 return
-                
+                    
             # Extraer el ID del proyecto del string "20096444 - Nombre del proyecto"
             parts = project_string.split(" - ")
             project_id = parts[0].strip()
             
-            # Establecer el valor en el Entry
-            self.project_var.set(project_id)
-            logger.info(f"Proyecto seleccionado: {project_id}")
+            # Establecer el valor en el Entry - AQUÍ ESTÁ EL CAMBIO
+            # En lugar de solo establecer el ID, mantener todo el string con nombre
+            self.project_var.set(project_string)
+            logger.info(f"Proyecto seleccionado: {project_string}")
             
             # Actualizar inmediatamente la interfaz para confirmar el cambio
             if self.root:
@@ -884,6 +924,267 @@ class IssuesExtractor:
             self.save_config()
         except Exception as e:
             logger.error(f"Error al seleccionar proyecto: {e}")
+
+                    
+            
+            
+                        
+            
+            
+            
+            
+            
+            
+            
+             
+                
+    def add_new_client(self):
+        """
+        Muestra un diálogo para añadir un nuevo cliente a la base de datos.
+        Solicita el número ERP, nombre y opcionalmente el business partner.
+        """
+        try:
+            # Crear una ventana de diálogo personalizada
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Añadir Nuevo Cliente")
+            dialog.geometry("400x200")
+            dialog.resizable(False, False)
+            dialog.grab_set()  # Modal window
+            dialog.focus_set()
+            
+            # Configurar el diálogo
+            dialog.grid_columnconfigure(1, weight=1)
+            
+            # Variables para los campos
+            erp_var = tk.StringVar()
+            name_var = tk.StringVar()
+            bp_var = tk.StringVar()
+            
+            # Etiquetas y campos de entrada
+            ttk.Label(dialog, text="Número ERP:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+            erp_entry = ttk.Entry(dialog, textvariable=erp_var, width=15)
+            erp_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+            
+            ttk.Label(dialog, text="Nombre del Cliente:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+            name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
+            name_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+            
+            ttk.Label(dialog, text="Business Partner (opcional):").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+            bp_entry = ttk.Entry(dialog, textvariable=bp_var, width=30)
+            bp_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+            
+            # Marco para botones
+            button_frame = ttk.Frame(dialog)
+            button_frame.grid(row=3, column=0, columnspan=2, pady=15)
+            
+            # Función para guardar el cliente
+            def save_client():
+                erp = erp_var.get().strip()
+                name = name_var.get().strip()
+                bp = bp_var.get().strip()
+                
+                # Validaciones
+                if not erp:
+                    messagebox.showerror("Error", "El número ERP es obligatorio", parent=dialog)
+                    return
+                    
+                if not name:
+                    messagebox.showerror("Error", "El nombre del cliente es obligatorio", parent=dialog)
+                    return
+                    
+                # Validar que el ERP sea numérico
+                if not erp.isdigit():
+                    messagebox.showerror("Error", "El número ERP debe contener solo dígitos", parent=dialog)
+                    return
+                    
+                # Guardar en la base de datos
+                if self.db_manager.save_client(erp, name, bp):
+                    messagebox.showinfo("Éxito", f"Cliente {erp} - {name} añadido correctamente", parent=dialog)
+                    
+                    # Actualizar la lista de clientes en el combobox
+                    clients = self.db_manager.get_clients()
+                    self.client_combo['values'] = clients
+                    
+                    # Ajustar el ancho del dropdown para los clientes
+                    from ui.main_window import adjust_combobox_dropdown_width
+                    adjust_combobox_dropdown_width(self.client_combo)
+                    
+                    # Seleccionar el nuevo cliente con formato "ID - NOMBRE"
+                    full_client = f"{erp} - {name}"
+                    for i, client in enumerate(clients):
+                        if client.startswith(erp):
+                            self.client_combo.current(i)
+                            self.select_client(client)
+                            break
+                    
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "No se pudo guardar el cliente", parent=dialog)
+            
+            # Botones
+            ttk.Button(button_frame, text="Guardar", command=save_client).grid(row=0, column=0, padx=10)
+            ttk.Button(button_frame, text="Cancelar", command=dialog.destroy).grid(row=0, column=1, padx=10)
+            
+            # Poner el foco en el primer campo
+            erp_entry.focus_set()
+            
+            # Centrar diálogo en la ventana principal
+            dialog.update_idletasks()
+            width = dialog.winfo_width()
+            height = dialog.winfo_height()
+            x = (self.root.winfo_width() // 2) - (width // 2) + self.root.winfo_x()
+            y = (self.root.winfo_height() // 2) - (height // 2) + self.root.winfo_y()
+            dialog.geometry(f"{width}x{height}+{x}+{y}")
+            
+            # Esperar a que se complete el diálogo
+            dialog.wait_window()
+            
+        except Exception as e:
+            logger.error(f"Error al añadir nuevo cliente: {e}")
+            if hasattr(self, 'root') and self.root:
+                messagebox.showerror("Error", f"No se pudo añadir el cliente: {e}")
+
+    def add_new_project(self):
+        """
+        Muestra un diálogo para añadir un nuevo proyecto a la base de datos.
+        Solicita el ID de proyecto, cliente asociado, nombre y caso de engagement.
+        """
+        try:
+            # Verificar que hay clientes disponibles
+            clients = self.db_manager.get_clients()
+            if not clients:
+                messagebox.showwarning("No hay clientes", "Debe añadir al menos un cliente antes de crear un proyecto.")
+                return
+            
+            # Crear una ventana de diálogo personalizada
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Añadir Nuevo Proyecto")
+            dialog.geometry("450x250")
+            dialog.resizable(False, False)
+            dialog.grab_set()  # Modal window
+            dialog.focus_set()
+            
+            # Configurar el diálogo
+            dialog.grid_columnconfigure(1, weight=1)
+            
+            # Variables para los campos
+            project_id_var = tk.StringVar()
+            client_var = tk.StringVar()
+            name_var = tk.StringVar()
+            engagement_var = tk.StringVar()
+            
+            # Si hay un cliente seleccionado, usarlo como valor predeterminado
+            current_client_string = self.client_var.get() if hasattr(self, 'client_var') else ""
+            current_client_id = current_client_string.split(" - ")[0] if " - " in current_client_string else current_client_string
+            
+            if current_client_id:
+                # Buscar el cliente completo (con nombre) en la lista
+                for client in clients:
+                    if client.startswith(current_client_id):
+                        client_var.set(client)
+                        break
+            
+            # Etiquetas y campos de entrada
+            ttk.Label(dialog, text="ID de Proyecto:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+            project_entry = ttk.Entry(dialog, textvariable=project_id_var, width=15)
+            project_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
+            
+            ttk.Label(dialog, text="Cliente:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+            client_combo = ttk.Combobox(dialog, textvariable=client_var, values=clients, width=30, state="readonly")
+            client_combo.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
+            
+            ttk.Label(dialog, text="Nombre del Proyecto:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
+            name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
+            name_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
+            
+            ttk.Label(dialog, text="Engagement Case (opcional):").grid(row=3, column=0, padx=10, pady=10, sticky="w")
+            engagement_entry = ttk.Entry(dialog, textvariable=engagement_var, width=30)
+            engagement_entry.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
+            
+            # Marco para botones
+            button_frame = ttk.Frame(dialog)
+            button_frame.grid(row=4, column=0, columnspan=2, pady=15)
+            
+            # Función para guardar el proyecto
+            def save_project():
+                project_id = project_id_var.get().strip()
+                selected_client = client_var.get().strip()
+                name = name_var.get().strip()
+                engagement = engagement_var.get().strip()
+                
+                # Validaciones
+                if not project_id:
+                    messagebox.showerror("Error", "El ID de proyecto es obligatorio", parent=dialog)
+                    return
+                    
+                if not selected_client:
+                    messagebox.showerror("Error", "Debe seleccionar un cliente", parent=dialog)
+                    return
+                    
+                if not name:
+                    messagebox.showerror("Error", "El nombre del proyecto es obligatorio", parent=dialog)
+                    return
+                    
+                # Validar que el ID de proyecto sea numérico
+                if not project_id.isdigit():
+                    messagebox.showerror("Error", "El ID de proyecto debe contener solo dígitos", parent=dialog)
+                    return
+                    
+                # Extraer el ERP number del cliente seleccionado (formato: "1025541 - Nombre")
+                client_erp = selected_client.split(" - ")[0].strip()
+                
+                # Guardar en la base de datos
+                if self.db_manager.save_project(project_id, client_erp, name, engagement):
+                    messagebox.showinfo("Éxito", f"Proyecto {project_id} - {name} añadido correctamente", parent=dialog)
+                    
+                    # Actualizar la lista de proyectos en el combobox
+                    projects = self.db_manager.get_projects(client_erp)
+                    self.project_combo['values'] = projects
+                    
+                    # Ajustar el ancho del dropdown para los proyectos
+                    from ui.main_window import adjust_combobox_dropdown_width
+                    adjust_combobox_dropdown_width(self.project_combo)
+                    
+                    # Seleccionar el nuevo proyecto con formato "ID - NOMBRE"
+                    full_project = f"{project_id} - {name}"
+                    for i, project in enumerate(projects):
+                        if project.startswith(project_id):
+                            self.project_combo.current(i)
+                            self.select_project(project)
+                            break
+                    
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "No se pudo guardar el proyecto", parent=dialog)
+            
+            # Botones
+            ttk.Button(button_frame, text="Guardar", command=save_project).grid(row=0, column=0, padx=10)
+            ttk.Button(button_frame, text="Cancelar", command=dialog.destroy).grid(row=0, column=1, padx=10)
+            
+            # Poner el foco en el primer campo
+            project_entry.focus_set()
+            
+            # Centrar diálogo en la ventana principal
+            dialog.update_idletasks()
+            width = dialog.winfo_width()
+            height = dialog.winfo_height()
+            x = (self.root.winfo_width() // 2) - (width // 2) + self.root.winfo_x()
+            y = (self.root.winfo_height() // 2) - (height // 2) + self.root.winfo_y()
+            dialog.geometry(f"{width}x{height}+{x}+{y}")
+            
+            # Esperar a que se complete el diálogo
+            dialog.wait_window()
+            
+        except Exception as e:
+            logger.error(f"Error al añadir nuevo proyecto: {e}")
+            if hasattr(self, 'root') and self.root:
+                messagebox.showerror("Error", f"No se pudo añadir el proyecto: {e}")
+            
+            
+            
+            
+            
+            
             
     def start_browser(self):
         """
@@ -955,12 +1256,10 @@ class IssuesExtractor:
 
 
 
-
-
-    
     def _show_extraction_instructions(self):
         """
         Muestra instrucciones para la extracción después de la navegación automática
+        utilizando el diálogo personalizado con mejor formato.
         
         Presenta un mensaje con información sobre el cliente y proyecto actuales,
         incluyendo sus nombres, y guía al usuario sobre los siguientes pasos.
@@ -1005,20 +1304,25 @@ class IssuesExtractor:
         if project_name:
             project_info += f" - {project_name}"
         
-        instructions = f"""
-        La aplicación ha navegado automáticamente a la página de SAP con:
-        
-        Cliente: {client_info}
-        Proyecto: {project_info}
-        
-        Por favor:
-        1. Verifica que has iniciado sesión correctamente
-        2. Comprueba que puedes ver las recomendaciones para el cliente
-        3. Cuando quieras comenzar, haz clic en 'Iniciar Extracción'
-        """
-        
-        messagebox.showinfo("Instrucciones de Extracción", instructions)
-    
+        try:
+            # Intentar usar el diálogo personalizado si está disponible
+            from ui.custom_dialogs import show_extraction_instructions
+            show_extraction_instructions(self.root, client_info, project_info)
+        except ImportError:
+            # Fallback a messagebox estándar si no está disponible el diálogo personalizado
+            instructions = f"""
+    La aplicación ha navegado automáticamente a la página de SAP con:
+
+    Cliente: {client_info}
+    Proyecto: {project_info}
+
+    Por favor:
+    1. Verifica que has iniciado sesión correctamente
+    2. Comprueba que puedes ver las recomendaciones para el cliente
+    3. Cuando quieras comenzar, haz clic en 'Iniciar Extracción'
+            """
+            
+            messagebox.showinfo("Instrucciones de Extracción", instructions)    
 
 
 
@@ -1122,32 +1426,76 @@ class IssuesExtractor:
             # Deshabilitar el widget
             self.log_text.configure(state='disabled')
             
-    def save_config(self):
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+    def _replace_standard_messageboxes(self):
         """
-        Guarda la configuración actual en un archivo JSON
+        Reemplaza los messagebox estándar por nuestros diálogos personalizados
+        con mejor formato y alineación de texto.
         
-        Almacena los valores actuales de cliente, proyecto y ruta del archivo Excel
-        para restaurarlos en futuras ejecuciones.
+        Este método modifica el comportamiento de messagebox para usar nuestros
+        diálogos personalizados que manejan mejor la alineación del texto.
         """
         try:
-            config = {
-                'client': self.client_var.get(),
-                'project': self.project_var.get(),
-                'excel_path': self.excel_file_path
-            }
+            # Intentar importar los diálogos personalizados
+            from ui.custom_dialogs import (
+                show_info, show_warning, show_error, show_question
+            )
             
-            config_dir = "config"
-            if not os.path.exists(config_dir):
-                os.makedirs(config_dir)
-                
-            config_path = os.path.join(config_dir, 'config.json')
+            # Guardar referencia a funciones originales
+            self._original_showinfo = messagebox.showinfo
+            self._original_showwarning = messagebox.showwarning
+            self._original_showerror = messagebox.showerror
+            self._original_askokcancel = messagebox.askokcancel
             
-            with open(config_path, 'w') as f:
-                json.dump(config, f)
-                
-            logger.debug("Configuración guardada correctamente")
+            # Reemplazar con las versiones mejoradas pero preservando la interfaz original
+            def custom_showinfo(title, message, **kwargs):
+                if self.root:
+                    return show_info(self.root, title, message)
+                else:
+                    return self._original_showinfo(title, message, **kwargs)
+                    
+            def custom_showwarning(title, message, **kwargs):
+                if self.root:
+                    return show_warning(self.root, title, message)
+                else:
+                    return self._original_showwarning(title, message, **kwargs)
+                    
+            def custom_showerror(title, message, **kwargs):
+                if self.root:
+                    return show_error(self.root, title, message)
+                else:
+                    return self._original_showerror(title, message, **kwargs)
+                    
+            def custom_askokcancel(title, message, **kwargs):
+                # Para diálogos que requieren respuesta, todavía usamos los originales
+                # ya que nuestros personalizados no tienen esa funcionalidad aún
+                return self._original_askokcancel(title, message, **kwargs)
+            
+            # Aplicar los reemplazos a nivel global
+            messagebox.showinfo = custom_showinfo
+            messagebox.showwarning = custom_showwarning
+            messagebox.showerror = custom_showerror
+            # No reemplazamos askokcancel ya que necesitamos su funcionalidad de respuesta
+            
+            return True
+            
+        except ImportError:
+            logger.debug("Diálogos personalizados no disponibles, usando messagebox estándar")
+            return False
         except Exception as e:
-            logger.error(f"Error al guardar configuración: {e}")
+            logger.error(f"Error al reemplazar messageboxes: {e}")
+            return False
+    
+        
             
     def load_config(self):
         """
@@ -1162,23 +1510,93 @@ class IssuesExtractor:
             if os.path.exists(config_path):
                 with open(config_path, 'r') as f:
                     config = json.load(f)
-                    
+                        
                     if 'client' in config and config['client']:
-                        self.client_var.set(config['client'].strip())
+                        client_id = config['client'].strip()
                         
+                        # Buscar el cliente completo (con nombre) en la base de datos
+                        found = False
+                        clients = self.db_manager.get_clients()
+                        for client in clients:
+                            if client.startswith(client_id):
+                                self.client_var.set(client)
+                                found = True
+                                break
+                        
+                        # Si no se encuentra, usar solo el ID
+                        if not found:
+                            self.client_var.set(client_id)
+                            
                     if 'project' in config and config['project']:
-                        self.project_var.set(config['project'].strip())
+                        project_id = config['project'].strip()
                         
+                        # Buscar el proyecto completo (con nombre) en la base de datos
+                        found = False
+                        client_id = self.client_var.get().split(" - ")[0] if " - " in self.client_var.get() else self.client_var.get()
+                        projects = self.db_manager.get_projects(client_id)
+                        for project in projects:
+                            if project.startswith(project_id):
+                                self.project_var.set(project)
+                                found = True
+                                break
+                        
+                        # Si no se encuentra, usar solo el ID
+                        if not found:
+                            self.project_var.set(project_id)
+                            
                     if 'excel_path' in config and os.path.exists(config['excel_path']):
                         self.excel_file_path = config['excel_path']
                         self.excel_manager.file_path = config['excel_path']
                         if hasattr(self, 'excel_filename_var') and self.excel_filename_var:
                             self.excel_filename_var.set(f"Archivo: {os.path.basename(config['excel_path'])}")
-                        
+                            
                     logger.info("Configuración cargada correctamente")
         except Exception as e:
             logger.error(f"Error al cargar configuración: {e}")
             
+    def save_config(self):
+        """
+        Guarda la configuración actual en un archivo JSON
+        
+        Almacena los valores actuales de cliente, proyecto y ruta del archivo Excel
+        para restaurarlos en futuras ejecuciones.
+        """
+        try:
+            # Extraer los IDs de cliente y proyecto (solo los números)
+            client_string = self.client_var.get()
+            project_string = self.project_var.get()
+            
+            client_id = client_string.split(" - ")[0] if " - " in client_string else client_string
+            project_id = project_string.split(" - ")[0] if " - " in project_string else project_string
+            
+            config = {
+                'client': client_id,
+                'project': project_id,
+                'excel_path': self.excel_file_path
+            }
+            
+            config_dir = "config"
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+                    
+            config_path = os.path.join(config_dir, 'config.json')
+            
+            with open(config_path, 'w') as f:
+                json.dump(config, f)
+                    
+            logger.debug("Configuración guardada correctamente")
+        except Exception as e:
+            logger.error(f"Error al guardar configuración: {e}")            
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     def exit_app(self):
         """
         Cierra la aplicación de forma controlada
@@ -1220,16 +1638,15 @@ class IssuesExtractor:
             # En caso de error, forzar cierre
             if self.root:
                 self.root.destroy()
+             
                 
     def create_gui(self):
         """
         Crea la interfaz gráfica completa de la aplicación
         
         Este método configura la ventana principal, los paneles, controles y
-        eventos de la interfaz gráfica de usuario.
-        
-        La implementación detallada de este método debería estar en el módulo ui/main_window.py,
-        pero aquí se mantiene una versión simplificada para compatibilidad.
+        eventos de la interfaz gráfica de usuario. También inicializa los
+        diálogos personalizados para mejor formato de texto.
         """
         from ui.main_window import MainWindow
         
@@ -1248,6 +1665,11 @@ class IssuesExtractor:
         self.setup_gui_logger()
         self.load_config()
         
+        # Reemplazar los messagebox estándar con nuestros diálogos personalizados
+        self._replace_standard_messageboxes()        
+
+
+
     def main_gui(self):
         """
         Punto de entrada principal con interfaz gráfica
