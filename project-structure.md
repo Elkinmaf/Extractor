@@ -26,6 +26,7 @@ sap_issues_extractor/
 │   ├── __init__.py
 │   ├── main_window.py            # Ventana principal de la interfaz
 │   └── dialogs.py                # Diálogos y ventanas adicionales
+        custom_dialogs.py         # Diálogos para evitar el sobredesbordamiento
 │
 └── extractor/                    # Lógica de extracción
     ├── __init__.py
