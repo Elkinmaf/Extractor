@@ -9,4 +9,4 @@ from ui.main_window import MainWindow
 from ui.dialogs import AboutDialog, SettingsDialog
 
 # Facilitar la importación directa
-__all__ = ['MainWindow', 'AboutDialog', 'SettingsDialog']
+__all__ = ['MainWindow', 'AboutDialog', 'SettingsDialog', 'custom_dialogs']

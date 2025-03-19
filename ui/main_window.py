@@ -15,6 +15,47 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+
+def adjust_combobox_dropdown_width(combobox):
+    """
+    Ajusta el ancho del dropdown del combobox al elemento más largo
+    
+    Esta función analiza todos los elementos en el combobox y ajusta
+    el ancho del dropdown para mostrar el elemento más largo.
+    
+    Args:
+        combobox: El widget ttk.Combobox a ajustar
+    """
+    """ values = combobox["values"]
+    if not values:
+        return
+    
+    # Calcular el ancho máximo basado en el elemento más largo
+    max_width = max([len(str(item)) for item in values])
+    
+    # Añadir margen para mejor visualización
+    width = max_width + 5
+    
+    # Limitar el ancho entre un mínimo y un máximo razonable
+    width = min(60, max(25, width))
+    """
+    
+    # Ajustar el ancho del combobox
+    combobox.configure(width=37)
+    
+    # En tkinter, también podemos modificar la opción de estilo del combobox para
+    # controlar el dropdown. Esto requiere acceso a la ventana principal.
+    try:
+        # Intentar obtener el estilo y modificarlo para que el dropdown sea más ancho
+        style = ttk.Style()
+        style.configure('TCombobox', postoffset=(0, 0, width*7, 0))
+    except Exception as e:
+        # Si hay algún error, simplemente lo ignoramos y usamos el ajuste básico
+        logger.debug(f"No se pudo ajustar el estilo del dropdown: {e}")
+
+
+
 class MainWindow:
     """Clase que maneja la interfaz de usuario principal para SAP Issues Extractor"""
     
@@ -335,38 +376,63 @@ class MainWindow:
             client_frame = ttk.Frame(client_section_frame)
             client_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
             client_frame.grid_columnconfigure(1, weight=1)
-            
+
             # Etiqueta y entrada para Cliente
             ttk.Label(client_frame, text="Cliente:").grid(row=0, column=0, sticky="w", padx=(0, 5))
-            
+
+            # Marco para contener el combo y el botón de añadir
+            client_combo_frame = ttk.Frame(client_frame)
+            client_combo_frame.grid(row=0, column=1, sticky="ew")
+            client_combo_frame.grid_columnconfigure(0, weight=1)
+
             # Combo editable para selección de cliente
-            self.client_combo = ttk.Combobox(client_frame, 
+            self.client_combo = ttk.Combobox(client_combo_frame, 
                                         textvariable=self.controller.client_var,
                                         state="readonly", width=25)
-            self.client_combo.grid(row=0, column=1, sticky="ew", pady=2)
-            
+            self.client_combo.grid(row=0, column=0, sticky="ew", pady=2)
+
+            # Botón para añadir nuevo cliente
+            add_client_btn = ttk.Button(client_combo_frame, text="+", width=2,
+                                    command=self.controller.add_new_client)
+            add_client_btn.grid(row=0, column=1, padx=(5, 0), pady=2)
+
             # Obtener y configurar lista de clientes
             clients = self.controller.db_manager.get_clients()
             self.client_combo['values'] = clients
+
+            # Ajuste automático ancho
+            adjust_combobox_dropdown_width(self.client_combo)
             
             # Seleccionar el primer cliente si hay alguno
             if clients:
                 self.client_combo.current(0)
                 self.controller.select_client(clients[0])
             
+            
             # Frame para proyecto
+
             project_frame = ttk.Frame(client_section_frame)
             project_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
             project_frame.grid_columnconfigure(1, weight=1)
-            
+
             # Etiqueta y entrada para Proyecto
             ttk.Label(project_frame, text="Proyecto:").grid(row=0, column=0, sticky="w", padx=(0, 5))
-            
+
+            # Marco para contener el combo y el botón de añadir
+            project_combo_frame = ttk.Frame(project_frame)
+            project_combo_frame.grid(row=0, column=1, sticky="ew")
+            project_combo_frame.grid_columnconfigure(0, weight=1)
+
             # Combo editable para selección de proyecto
-            self.project_combo = ttk.Combobox(project_frame, 
+            self.project_combo = ttk.Combobox(project_combo_frame, 
                                         textvariable=self.controller.project_var,
                                         state="readonly", width=25)
-            self.project_combo.grid(row=0, column=1, sticky="ew", pady=2)
+            self.project_combo.grid(row=0, column=0, sticky="ew", pady=2)
+
+            # Botón para añadir nuevo proyecto
+            add_project_btn = ttk.Button(project_combo_frame, text="+", width=2,
+                                    command=self.controller.add_new_project)
+            add_project_btn.grid(row=0, column=1, padx=(5, 0), pady=2)
             
             # Separador
             ttk.Separator(self.left_panel, orient="horizontal").grid(
