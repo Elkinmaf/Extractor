@@ -1190,12 +1190,20 @@ class IssuesExtractor:
 
 
 
-        
+
+
+
+
+
+
+
     def _start_browser_thread(self):
         """
         Método para ejecutar la inicialización del navegador en un hilo separado
         
         Realiza la conexión con el navegador y navega a la URL inicial de SAP.
+        Mantiene el flujo original para hacer clic en el botón de ajustes y
+        añade pasos adicionales para completar la secuencia de navegación.
         """
         try:
             if self.connect_to_browser():
@@ -1221,39 +1229,141 @@ class IssuesExtractor:
                 if self.root:
                     self.root.after(0, lambda: self.status_var.set("Configurando columnas visibles..."))
                 
-                # 1. Hacer clic en el botón de ajustes
+                # 1. Hacer clic en el botón de ajustes - MANTENER COMPORTAMIENTO ORIGINAL
                 if self.browser.click_settings_button():
                     logger.info("✅ Botón de ajustes pulsado correctamente")
                     
                     # Esperar a que se abra el panel de ajustes
-                    time.sleep(2)
+                    time.sleep(1)
                     
-                    # 2, 3, 4. Seleccionar todas las columnas visibles
-                    if self.browser.select_all_visible_columns():
-                        logger.info("✅ Columnas configuradas correctamente")
+                    # 2. Continuar con la secuencia de navegación por teclado desde aquí
+                    # En lugar de usar select_all_visible_columns, usar una secuencia de teclas
+                    # para completar los pasos 5-11
+                    
+                    # Importar las clases necesarias
+                    from selenium.webdriver.common.action_chains import ActionChains
+                    from selenium.webdriver.common.keys import Keys
+                    
+                    try:
+                        # PASO 5-7: 3 tabs, 2 flechas derecha, Enter para Select Columns
+                        logger.info("Continuando con pasos 5-7: Navegando a 'Select Columns'...")
+                        actions = ActionChains(self.browser.driver)
                         
-                        # Esperar a que se recargue la tabla con las nuevas columnas
+                        # 3 tabs
+                        for i in range(5):
+                            actions.send_keys(Keys.TAB)
+                            actions.pause(0.3)
+                        
+                        # 2 flechas derecha
+                        for i in range(2):
+                            actions.send_keys(Keys.ARROW_RIGHT)
+                            actions.pause(0.3)
+                        
+                        # Enter para Select Columns
+                        actions.send_keys(Keys.ENTER)
+                        actions.perform()
+                        logger.info("✅ Pasos 5-7: Navegación a 'Select Columns' completada")
+                        
+                        # Esperar a que se abra el panel de columnas
+                        time.sleep(2)
+                        
+                        # PASO 8-9: 3 tabs y Enter para Select All
+                        logger.info("Ejecutando pasos 8-9: Seleccionando 'Select All'...")
+                        actions = ActionChains(self.browser.driver)
+                        
+                        # 3 tabs
+                        for i in range(3):
+                            actions.send_keys(Keys.TAB)
+                            actions.pause(0.3)
+                        
+                        # Enter para Select All
+                        actions.send_keys(Keys.ENTER)
+                        actions.perform()
+                        logger.info("✅ Pasos 8-9: 'Select All' marcado correctamente")
+                        
+                        # Esperar a que se procese la selección
+                        time.sleep(1.5)
+                        
+                        # PASO 10-11: 2 tabs y Enter para OK
+                        logger.info("Ejecutando pasos 10-11: Confirmando con OK...")
+                        actions = ActionChains(self.browser.driver)
+                        
+                        # 2 tabs
+                        for i in range(2):
+                            actions.send_keys(Keys.TAB)
+                            actions.pause(0.3)
+                        
+                        # Enter para OK
+                        actions.send_keys(Keys.ENTER)
+                        actions.perform()
+                        logger.info("✅ Pasos 10-11: Confirmación con OK completada")
+                        
+                        # Esperar a que se cierre el panel y se apliquen los cambios
                         time.sleep(3)
-                    else:
-                        logger.warning("⚠️ No se pudieron configurar todas las columnas")
                         
-                        # Informar al usuario en el hilo principal
-                        if self.root:
-                            self.root.after(0, lambda: messagebox.showinfo(
-                                "Configuración manual",
-                                "No se pudieron configurar todas las columnas automáticamente.\n\n"
-                                "Si es posible, seleccione manualmente 'Select All' y haga clic en OK."
-                            ))
+                        logger.info("✅ Configuración de columnas completada exitosamente")
+                        
+                    except Exception as keyboard_e:
+                        logger.warning(f"Error al ejecutar secuencia de teclado: {keyboard_e}")
+                        
+                        # Si falla la secuencia de teclado, intentar con select_all_visible_columns
+                        logger.info("Intentando método alternativo...")
+                        if self.browser.select_all_visible_columns():
+                            logger.info("✅ Columnas configuradas correctamente con método alternativo")
+                            
+                            # Esperar a que se recargue la tabla con las nuevas columnas
+                            time.sleep(3)
+                        else:
+                            logger.warning("⚠️ No se pudieron configurar todas las columnas")
+                            
+                            # Informar al usuario en el hilo principal
+                            if self.root:
+                                self.root.after(0, lambda: messagebox.showinfo(
+                                    "Configuración manual",
+                                    "No se pudieron configurar todas las columnas automáticamente.\n\n"
+                                    "Por favor, realice estos pasos manualmente:\n"
+                                    "1. Pulse Tab 3 veces\n" 
+                                    "2. Pulse flecha derecha 2 veces\n"
+                                    "3. Pulse Enter (para columnas)\n"
+                                    "4. Pulse Tab 3 veces\n"
+                                    "5. Pulse Enter (para Select All)\n"
+                                    "6. Pulse Tab 2 veces\n"
+                                    "7. Pulse Enter (para OK)"
+                                ))
                 else:
                     logger.warning("⚠️ No se pudo hacer clic en el botón de ajustes")
                     
-                    # Informar al usuario en el hilo principal
-                    if self.root:
-                        self.root.after(0, lambda: messagebox.showwarning(
-                            "Acción Manual Requerida",
-                            "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
-                            "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha."
-                        ))
+                    # Intentar enfoque alternativo completo con navegación por teclado si existe
+                    if hasattr(self.browser, 'navigate_keyboard_sequence'):
+                        logger.info("Intentando navegación completa por teclado como alternativa...")
+                        if self.browser.navigate_keyboard_sequence():
+                            logger.info("✅ Navegación por teclado completada correctamente")
+                        else:
+                            # Informar al usuario en el hilo principal
+                            if self.root:
+                                self.root.after(0, lambda: messagebox.showwarning(
+                                    "Acción Manual Requerida",
+                                    "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
+                                    "Por favor, realice estos pasos manualmente:\n"
+                                    "1. Haga clic en el título 'Issues and Actions Overview'\n"
+                                    "2. Pulse Tab 18 veces\n"
+                                    "3. Pulse Enter (para ajustes)\n"
+                                    "4. Pulse Tab 3 veces\n" 
+                                    "5. Pulse flecha derecha 2 veces\n"
+                                    "6. Pulse Enter (para columnas)\n"
+                                    "7. Pulse Tab 3 veces\n"
+                                    "8. Pulse Enter (para Select All)\n"
+                                    "9. Pulse Tab 2 veces\n"
+                                    "10. Pulse Enter (para OK)"
+                                ))
+                    else:
+                        # Informar al usuario en el hilo principal (mensaje original)
+                        if self.root:
+                            self.root.after(0, lambda: messagebox.showwarning(
+                                "Acción Manual Requerida",
+                                "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
+                                "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha."
+                            ))
                 
                 # Mostrar instrucciones en el hilo principal
                 if self.root:
@@ -1268,6 +1378,11 @@ class IssuesExtractor:
             if self.root:
                 self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Error al iniciar el navegador: {e}"))
+
+
+
+
+
 
 
 
