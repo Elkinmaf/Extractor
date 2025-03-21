@@ -88,20 +88,30 @@ class IssuesExtractor:
         
         
         
+    
     def configure_columns_after_settings(self):
         """
         Método auxiliar para configurar todas las columnas después de abrir el panel de ajustes.
         Este método debe ser llamado después de hacer clic en el botón de ajustes.
         
+        Utiliza la implementación robusta de selección de columnas que sigue
+        la secuencia de teclas verificada en las pruebas.
+        
         Returns:
             bool: True si el proceso fue exitoso, False en caso contrario
         """
         try:
-            # Importar el módulo
-            from browser.robust_column_selection import select_all_columns
+            logger.info("Configurando columnas después de abrir panel de ajustes...")
             
-            # Ejecutar la selección de columnas
-            result = select_all_columns(self.driver)
+            # Verificar que tenemos acceso al navegador
+            if not self.browser or not self.driver:
+                logger.error("No hay navegador inicializado")
+                return False
+            
+            # Ejecutar la selección de columnas usando el método robusto
+            # Este método utiliza una secuencia específica de teclas (Tab, flechas, Enter)
+            # que ha sido verificada en pruebas
+            result = self.browser.select_all_visible_columns()
             
             if result:
                 logger.info("✅ Columnas configuradas correctamente")
@@ -112,29 +122,21 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al configurar columnas: {e}")
             return False
-        
-        
-        
-        
-        
-        
-        
-        
     def choose_excel_file(self):
-        """Permite al usuario elegir un archivo Excel existente o crear uno nuevo"""
-        file_path = self.excel_manager.select_file()
-        self.excel_file_path = file_path
-        self.excel_manager.file_path = file_path
-        
-        # Actualizar la interfaz si existe
-        if hasattr(self, 'status_var') and self.status_var:
-            self.status_var.set(f"Archivo Excel seleccionado: {os.path.basename(file_path)}")
-        
-        # Actualizar el nombre del archivo en la etiqueta
-        if hasattr(self, 'excel_filename_var') and self.excel_filename_var:
-            self.excel_filename_var.set(f"Archivo: {os.path.basename(file_path)}")
+            """Permite al usuario elegir un archivo Excel existente o crear uno nuevo"""
+            file_path = self.excel_manager.select_file()
+            self.excel_file_path = file_path
+            self.excel_manager.file_path = file_path
             
-        return file_path
+            # Actualizar la interfaz si existe
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set(f"Archivo Excel seleccionado: {os.path.basename(file_path)}")
+            
+            # Actualizar el nombre del archivo en la etiqueta
+            if hasattr(self, 'excel_filename_var') and self.excel_filename_var:
+                self.excel_filename_var.set(f"Archivo: {os.path.basename(file_path)}")
+                
+            return file_path
         
     def connect_to_browser(self):
         """Conecta con el navegador y devuelve el éxito de la conexión"""
@@ -171,7 +173,6 @@ class IssuesExtractor:
             
         return success, new_items, updated_items
         
-
 
 
 
@@ -364,63 +365,50 @@ class IssuesExtractor:
                     if not result:
                         return False
             
-            # PASO OBLIGATORIO: Hacer clic en el botón de ajustes
+            # MÉTODO AUTOMATIZADO DE NAVEGACIÓN POR TECLADO
             if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Accediendo a ajustes...")
-                
-            # Intentar hacer clic en ajustes de forma automática
-            if not self.browser.click_settings_button():
-                logger.warning("No se pudo hacer clic automáticamente en el botón de ajustes")
-                # Solicitar acción manual ya que este paso es obligatorio
-                if hasattr(self, 'root') and self.root:
-                    messagebox.showwarning("Acción Manual Requerida", 
-                        "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
-                        "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha.")
-                    result = messagebox.askokcancel("Confirmación", "¿Ha hecho clic en el botón de ajustes?")
-                    if not result:
-                        logger.error("Usuario canceló después de no poder hacer clic en ajustes")
-                        if hasattr(self, 'status_var') and self.status_var:
-                            self.status_var.set("Proceso cancelado: No se pudo acceder a ajustes")
-                        return False
-            
-            # Esperar un momento para que se abra el panel de ajustes
-            time.sleep(2)
-            
-            # ====== SELECCIÓN DE TODAS LAS COLUMNAS ======
-            # Seleccionar todas las columnas disponibles para maximizar datos extraídos
-            logger.info("Intentando seleccionar todas las columnas disponibles...")
+                self.status_var.set("Iniciando navegación por teclado...")
 
-            # Actualizar la interfaz si existe
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Configurando columnas visibles...")
-                if self.root:
-                    self.root.update()
-                    
-            columns_configured = self.browser.select_all_visible_columns()
-
-            if columns_configured:
-                logger.info("✅ Columnas configuradas correctamente para extracción completa")
+            # Usar el método mejorado que maneja toda la navegación después de seleccionar cliente y proyecto
+            # con la secuencia exacta de teclas especificada
+            if self.browser.navigate_post_selection():
+                logger.info("✅ Navegación post-selección completada con éxito")
                 
                 # Esperar a que se recargue la tabla con las nuevas columnas
                 time.sleep(3)
             else:
-                logger.warning("⚠️ No se pudieron configurar todas las columnas")
+                logger.warning("❌ La navegación automática por teclado falló")
                 
-                # Si no se pudieron configurar automáticamente, informar al usuario
-                if self.root:
-                    messagebox.showinfo(
-                        "Configuración manual",
-                        "No se pudieron configurar todas las columnas automáticamente.\n\n"
-                        "Si es posible, seleccione manualmente 'Select All' y haga clic en OK."
-                    )
-                    time.sleep(3)  # Dar tiempo para configuración manual
-            
-            
-            
-            
-            
-            
-            
+                # Si falla la navegación automática, intentar el método anterior
+                if hasattr(self, 'status_var') and self.status_var:
+                    self.status_var.set("Intentando método alternativo...")
+                    
+                # Intentar hacer clic en ajustes manualmente
+                if not self.browser.navigate_keyboard_sequence():
+                    logger.warning("No se pudo completar la secuencia de navegación por teclado")
+                    
+                    if hasattr(self, 'root') and self.root:
+                        messagebox.showwarning("Acción Manual Requerida", 
+                            "La navegación automática ha fallado.\n\n"
+                            "Por favor, realice estos pasos manualmente:\n"
+                            "1. Haga clic en el título 'Issues and Actions Overview'\n"
+                            "2. Pulse Tab 18 veces\n"
+                            "3. Pulse Enter (para ajustes)\n"
+                            "4. Pulse Tab 3 veces\n" 
+                            "5. Pulse flecha derecha 2 veces\n"
+                            "6. Pulse Enter (para columnas)\n"
+                            "7. Pulse Tab 3 veces\n"
+                            "8. Pulse Enter (para Select All)\n"
+                            "9. Pulse Tab 2 veces\n"
+                            "10. Pulse Enter (para OK)")
+                        
+                        result = messagebox.askokcancel("Confirmación", 
+                                                    "¿Ha completado los pasos manualmente?")
+                        if not result:
+                            logger.error("Usuario canceló después de fallo en navegación automática")
+                            if hasattr(self, 'status_var') and self.status_var:
+                                self.status_var.set("Proceso cancelado por el usuario")
+                            return False
             
             # Realizar la extracción
             return self.perform_extraction()
@@ -432,11 +420,7 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set(f"Error: {e}")
                 
-            return False
-        
-    
-    
-    
+            return False    
     
     
     
@@ -936,18 +920,17 @@ class IssuesExtractor:
             
             
             
-             
-                
+
     def add_new_client(self):
         """
         Muestra un diálogo para añadir un nuevo cliente a la base de datos.
-        Solicita el número ERP, nombre y opcionalmente el business partner.
+        Solicita solo el número ERP y nombre del cliente, eliminando el campo Business Partner.
         """
         try:
             # Crear una ventana de diálogo personalizada
             dialog = tk.Toplevel(self.root)
             dialog.title("Añadir Nuevo Cliente")
-            dialog.geometry("400x200")
+            dialog.geometry("400x150")  # Reduzco el tamaño ya que eliminamos un campo
             dialog.resizable(False, False)
             dialog.grab_set()  # Modal window
             dialog.focus_set()
@@ -958,20 +941,15 @@ class IssuesExtractor:
             # Variables para los campos
             erp_var = tk.StringVar()
             name_var = tk.StringVar()
-            bp_var = tk.StringVar()
             
             # Etiquetas y campos de entrada
-            ttk.Label(dialog, text="Número ERP:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+            ttk.Label(dialog, text="ERP Customer Number:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
             erp_entry = ttk.Entry(dialog, textvariable=erp_var, width=15)
             erp_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
             
             ttk.Label(dialog, text="Nombre del Cliente:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
             name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
             name_entry.grid(row=1, column=1, padx=10, pady=10, sticky="ew")
-            
-            ttk.Label(dialog, text="Business Partner (opcional):").grid(row=2, column=0, padx=10, pady=10, sticky="w")
-            bp_entry = ttk.Entry(dialog, textvariable=bp_var, width=30)
-            bp_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
             
             # Marco para botones
             button_frame = ttk.Frame(dialog)
@@ -981,7 +959,6 @@ class IssuesExtractor:
             def save_client():
                 erp = erp_var.get().strip()
                 name = name_var.get().strip()
-                bp = bp_var.get().strip()
                 
                 # Validaciones
                 if not erp:
@@ -997,8 +974,8 @@ class IssuesExtractor:
                     messagebox.showerror("Error", "El número ERP debe contener solo dígitos", parent=dialog)
                     return
                     
-                # Guardar en la base de datos
-                if self.db_manager.save_client(erp, name, bp):
+                # Guardar en la base de datos - ya no pasamos business_partner
+                if self.db_manager.save_client(erp, name):
                     messagebox.showinfo("Éxito", f"Cliente {erp} - {name} añadido correctamente", parent=dialog)
                     
                     # Actualizar la lista de clientes en el combobox
@@ -1047,7 +1024,7 @@ class IssuesExtractor:
     def add_new_project(self):
         """
         Muestra un diálogo para añadir un nuevo proyecto a la base de datos.
-        Solicita el ID de proyecto, cliente asociado, nombre y caso de engagement.
+        Solicita solo el ID de proyecto, cliente asociado y nombre, eliminando el campo Engagement Case.
         """
         try:
             # Verificar que hay clientes disponibles
@@ -1059,7 +1036,7 @@ class IssuesExtractor:
             # Crear una ventana de diálogo personalizada
             dialog = tk.Toplevel(self.root)
             dialog.title("Añadir Nuevo Proyecto")
-            dialog.geometry("450x250")
+            dialog.geometry("450x200")  # Reduzco el tamaño ya que eliminamos un campo
             dialog.resizable(False, False)
             dialog.grab_set()  # Modal window
             dialog.focus_set()
@@ -1071,7 +1048,6 @@ class IssuesExtractor:
             project_id_var = tk.StringVar()
             client_var = tk.StringVar()
             name_var = tk.StringVar()
-            engagement_var = tk.StringVar()
             
             # Si hay un cliente seleccionado, usarlo como valor predeterminado
             current_client_string = self.client_var.get() if hasattr(self, 'client_var') else ""
@@ -1085,7 +1061,7 @@ class IssuesExtractor:
                         break
             
             # Etiquetas y campos de entrada
-            ttk.Label(dialog, text="ID de Proyecto:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+            ttk.Label(dialog, text="Case ID o Número de Proyecto:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
             project_entry = ttk.Entry(dialog, textvariable=project_id_var, width=15)
             project_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
             
@@ -1097,10 +1073,6 @@ class IssuesExtractor:
             name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
             name_entry.grid(row=2, column=1, padx=10, pady=10, sticky="ew")
             
-            ttk.Label(dialog, text="Engagement Case (opcional):").grid(row=3, column=0, padx=10, pady=10, sticky="w")
-            engagement_entry = ttk.Entry(dialog, textvariable=engagement_var, width=30)
-            engagement_entry.grid(row=3, column=1, padx=10, pady=10, sticky="ew")
-            
             # Marco para botones
             button_frame = ttk.Frame(dialog)
             button_frame.grid(row=4, column=0, columnspan=2, pady=15)
@@ -1110,7 +1082,6 @@ class IssuesExtractor:
                 project_id = project_id_var.get().strip()
                 selected_client = client_var.get().strip()
                 name = name_var.get().strip()
-                engagement = engagement_var.get().strip()
                 
                 # Validaciones
                 if not project_id:
@@ -1118,7 +1089,7 @@ class IssuesExtractor:
                     return
                     
                 if not selected_client:
-                    messagebox.showerror("Error", "Debe seleccionar un cliente", parent=dialog)
+                    messagebox.showerror("Error", "Debes seleccionar un cliente", parent=dialog)
                     return
                     
                 if not name:
@@ -1133,8 +1104,8 @@ class IssuesExtractor:
                 # Extraer el ERP number del cliente seleccionado (formato: "1025541 - Nombre")
                 client_erp = selected_client.split(" - ")[0].strip()
                 
-                # Guardar en la base de datos
-                if self.db_manager.save_project(project_id, client_erp, name, engagement):
+                # Guardar en la base de datos - ya no pasamos engagement_case (cadena vacía)
+                if self.db_manager.save_project(project_id, client_erp, name):
                     messagebox.showinfo("Éxito", f"Proyecto {project_id} - {name} añadido correctamente", parent=dialog)
                     
                     # Actualizar la lista de proyectos en el combobox
@@ -1178,8 +1149,7 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al añadir nuevo proyecto: {e}")
             if hasattr(self, 'root') and self.root:
-                messagebox.showerror("Error", f"No se pudo añadir el proyecto: {e}")
-            
+                messagebox.showerror("Error", f"No se pudo añadir el proyecto: {e}")            
             
             
             
@@ -1216,6 +1186,10 @@ class IssuesExtractor:
             logger.error(f"Error al iniciar el navegador: {e}")
             self.status_var.set(f"Error: {e}")
             messagebox.showerror("Error", f"Error al iniciar el navegador: {e}")
+
+
+
+
         
     def _start_browser_thread(self):
         """
@@ -1238,6 +1212,49 @@ class IssuesExtractor:
                 # Navegar a la URL de SAP con parámetros específicos
                 self.browser.navigate_to_sap(erp_number, project_id)
                 
+                # Esperar a que se cargue completamente la página y maneje autenticación si es necesario
+                self.browser.handle_authentication()
+                time.sleep(3)  # Dar tiempo para que la interfaz se estabilice
+                
+                # NUEVA SECUENCIA: Configurar columnas después de navegación
+                # Actualizar la interfaz en el hilo principal
+                if self.root:
+                    self.root.after(0, lambda: self.status_var.set("Configurando columnas visibles..."))
+                
+                # 1. Hacer clic en el botón de ajustes
+                if self.browser.click_settings_button():
+                    logger.info("✅ Botón de ajustes pulsado correctamente")
+                    
+                    # Esperar a que se abra el panel de ajustes
+                    time.sleep(2)
+                    
+                    # 2, 3, 4. Seleccionar todas las columnas visibles
+                    if self.browser.select_all_visible_columns():
+                        logger.info("✅ Columnas configuradas correctamente")
+                        
+                        # Esperar a que se recargue la tabla con las nuevas columnas
+                        time.sleep(3)
+                    else:
+                        logger.warning("⚠️ No se pudieron configurar todas las columnas")
+                        
+                        # Informar al usuario en el hilo principal
+                        if self.root:
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "Configuración manual",
+                                "No se pudieron configurar todas las columnas automáticamente.\n\n"
+                                "Si es posible, seleccione manualmente 'Select All' y haga clic en OK."
+                            ))
+                else:
+                    logger.warning("⚠️ No se pudo hacer clic en el botón de ajustes")
+                    
+                    # Informar al usuario en el hilo principal
+                    if self.root:
+                        self.root.after(0, lambda: messagebox.showwarning(
+                            "Acción Manual Requerida",
+                            "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
+                            "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha."
+                        ))
+                
                 # Mostrar instrucciones en el hilo principal
                 if self.root:
                     self.root.after(0, lambda: self.status_var.set("Navegación completada. Inicie la extracción cuando esté listo."))
@@ -1251,7 +1268,6 @@ class IssuesExtractor:
             if self.root:
                 self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Error al iniciar el navegador: {e}"))
-
 
 
 
@@ -1694,11 +1710,11 @@ def run_console_mode():
     print("\n===== SAP Issues Extractor - Modo Consola =====\n")
     
     # Cliente
-    erp_number = input("Introduzca el número ERP del cliente (Ej: 1025541): ").strip()
+    erp_number = input("Ingresa el ERP Customer Number (Ej: 1025541): ").strip()
     extractor.client_var = type('obj', (object,), {'get': lambda: erp_number})
     
     # Proyecto
-    project_id = input("Introduzca el ID del proyecto (Ej: 20096444): ").strip()
+    project_id = input("Ingresa el Case ID o número del proyecto (Ej: 20096444): ").strip()
     extractor.project_var = type('obj', (object,), {'get': lambda: project_id})
     
     # Archivo Excel
