@@ -8,11 +8,25 @@ Coordina la inicialización de componentes y maneja la lógica de ejecución en 
 modos (GUI o consola).
 """
 
+  
+import io
+
 import os
+os.system("chcp 65001")
 import sys
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 import logging
 import traceback
 from datetime import datetime
+from tools.vba_extractor import VBAExtractor
+
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
+import logging
 
 # Configurar logging básico inicial
 log_dir = "logs"
