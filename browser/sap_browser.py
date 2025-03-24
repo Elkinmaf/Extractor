@@ -9,13 +9,9 @@ Proporciona funcionalidades específicas para interactuar con aplicaciones SAP U
 
 
 import os
-
 import time
-
 import logging
-
 import re
-
 import time
 
 
@@ -30,16 +26,14 @@ from typing import Optional, List, Dict, Union, Tuple
 
 
 
-
-
 # Importaciones de Selenium
 
 from selenium import webdriver
 
 from selenium.webdriver.chrome.service import Service
 
-
-
+import time
+import logging
 
 
 from selenium.webdriver.common.action_chains import ActionChains
@@ -73,6 +67,11 @@ from selenium.common.exceptions import (
 
 
 # Importaciones locales
+
+from utils.logger_config import logger
+from config.settings import BROWSER_TIMEOUT
+
+
 
 from config.settings import CHROME_PROFILE_DIR, BROWSER_TIMEOUT, MAX_RETRY_ATTEMPTS
 
@@ -5786,200 +5785,213 @@ class SAPBrowser:
 
 
 
-    def scroll_to_load_all_items(self, total_expected=100, max_attempts=100):
 
+    def scroll_to_load_all_items(self, total_expected=100, max_attempts=30):
         """
-
-        Estrategia optimizada para cargar todos los elementos mediante scroll con mejor rendimiento
-
+        Método mejorado para cargar todos los elementos mediante scroll optimizado para SAP UI5/Fiori.
+        Implementa múltiples técnicas para asegurar la carga completa de filas.
         
-
         Args:
-
             total_expected (int): Número total de elementos esperados
-
             max_attempts (int): Número máximo de intentos de scroll
-
-            
-
+                
         Returns:
-
             int: Número de elementos cargados
-
         """
-
         logger.info(f"Iniciando carga de {total_expected} elementos...")
-
         
-
         previous_rows_count = 0
-
         no_change_count = 0
-
-        no_change_threshold = 10
-
+        loaded_rows = 0
         
-
-        # Verificar tipo de tabla y estrategia de carga
-
-        table_type = detect_table_type(self.driver)
-
-        logger.info(f"Tipo de tabla detectado: {table_type}")
-
+        # Optimizar para mejor rendimiento
+        try:
+            self.driver.execute_script("""
+                // Desactivar animaciones para mejorar rendimiento
+                document.querySelectorAll('*').forEach(el => {
+                    if(el.style) {
+                        el.style.animationDuration = '0.001s';
+                        el.style.transitionDuration = '0.001s';
+                    }
+                });
+            """)
+        except Exception as e:
+            logger.debug(f"Error al optimizar página: {e}")
         
-
-        # Verificar si hay paginación
-
-        pagination_elements = check_for_pagination(self.driver)
-
-        has_pagination = pagination_elements is not None and len(pagination_elements) > 0
-
+        # Lista para registrar contenido único y evitar falsos positivos con duplicados
+        unique_content = set()
         
-
-        logger.info(f"¿La tabla tiene paginación? {'Sí' if has_pagination else 'No'}")
-
-        
-
-        # Ejecutar script para optimizar el rendimiento del navegador
-
-        optimize_browser_performance(self.driver)
-
-        
-
-        # Algoritmo principal de scroll
-
+        # Bucle principal de scroll
         for attempt in range(max_attempts):
-
             try:
-
-                # Usar estrategia de scroll adaptada al tipo de tabla detectado
-
-                if table_type == "standard_ui5":
-
-                    self._scroll_standard_ui5_table()
-
-                elif table_type == "responsive_table":
-
-                    self._scroll_responsive_table()
-
-                elif table_type == "grid_table":
-
-                    self._scroll_grid_table()
-
-                else:
-
-                    # Estrategia genérica
-
-                    self._scroll_generic()
-
+                # 1. PRIMERA ESTRATEGIA: Buscar y hacer clic en botones "Show More"
+                more_clicked = False
+                show_more_patterns = [
+                    "//span[contains(text(), 'Show More')]",
+                    "//button[contains(text(), 'Show More')]",
+                    "//div[contains(text(), 'Show More')]",
+                    "//span[contains(text(), 'Load More')]",
+                    "//button[contains(text(), 'Load More')]",
+                    "//span[contains(text(), 'More')]",
+                    "//span[contains(text(), 'Ver más')]",
+                    "//button[contains(text(), 'Más')]",
+                    "//a[contains(text(), 'Show More')]"
+                ]
                 
-
-                # Contar filas actualmente visibles
-
-                rows = find_table_rows(self.driver, highlight=False)
-
-                current_rows_count = len(rows)
-
-                
-
-                # Registrar progreso periódicamente
-
-                if attempt % 10 == 0:
-
-                    logger.info(f"Intento {attempt+1}: {current_rows_count} filas cargadas")
-
-                
-
-                # Verificación de carga completa con lógica mejorada
-
-                if current_rows_count == previous_rows_count:
-
-                    no_change_count += 1
-
+                for xpath in show_more_patterns:
+                    buttons = self.driver.find_elements(By.XPATH, xpath)
+                    for button in buttons:
+                        if button.is_displayed():
+                            # Hacer scroll al botón para asegurar visibilidad
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                            time.sleep(0.5)
+                            
+                            # Intentar primero con JavaScript click
+                            try:
+                                self.driver.execute_script("arguments[0].click();", button)
+                                logger.info(f"Haciendo clic en botón '{button.text}'")
+                                more_clicked = True
+                                time.sleep(2)  # Esperar a que carguen nuevos elementos
+                                break
+                            except:
+                                # Si falla, intentar con click normal
+                                try:
+                                    button.click()
+                                    logger.info(f"Clic normal en botón '{button.text}'")
+                                    more_clicked = True
+                                    time.sleep(2)
+                                    break
+                                except:
+                                    continue
                     
-
-                    # Si hay paginación y no hay cambios, intentar pasar a página siguiente
-
-                    if has_pagination and no_change_count >= 5:
-
-                        logger.info("Intentando pasar a la siguiente página...")
-
-                        pagination_elements = check_for_pagination(self.driver)
-
-                        if pagination_elements and self.click_pagination_next(pagination_elements):
-
-                            logger.info("Se pasó a la siguiente página")
-
-                            no_change_count = 0
-
-                            time.sleep(3)
-
-                            continue
-
-                    
-
-                    # Si no hay cambios, aplicar estrategias adicionales de scroll
-
-                    if no_change_count >= 5:
-
-                        if no_change_count % 5 == 0:  # Alternar estrategias
-
-                            self._apply_alternative_scroll_strategy(no_change_count)
-
-                    
-
-                    # Criterios de finalización adaptados
-
-                    if self._should_finish_scrolling(no_change_count, current_rows_count, total_expected):
-
+                    if more_clicked:
                         break
-
-                else:
-
-                    # Reiniciar contador si se encontraron más filas
-
+                
+                # 2. SEGUNDA ESTRATEGIA: Scroll en contenedores específicos de SAP
+                if not more_clicked:
+                    scroll_script = """
+                    (function() {
+                        var scrolled = false;
+                        
+                        // Lista de posibles contenedores SAP
+                        var containers = [
+                            document.querySelector('.sapMList'),
+                            document.querySelector('.sapMTable'),
+                            document.querySelector('.sapMListItems'),
+                            document.querySelector('.sapUiTable'),
+                            document.querySelector('.sapMPage'),
+                            document.querySelector('[role="grid"]'),
+                            document.querySelector('[role="list"]')
+                        ];
+                        
+                        // Intentar scroll en cada contenedor
+                        for (var i = 0; i < containers.length; i++) {
+                            var container = containers[i];
+                            if (container) {
+                                var originalScrollTop = container.scrollTop;
+                                container.scrollTop += 500;
+                                
+                                if (container.scrollTop > originalScrollTop) {
+                                    scrolled = true;
+                                    console.log("Scroll efectivo en contenedor SAP UI5");
+                                }
+                            }
+                        }
+                        
+                        // Si ningún scroll específico funcionó, usar scroll general
+                        if (!scrolled) {
+                            window.scrollTo(0, document.body.scrollHeight);
+                        }
+                        
+                        return scrolled;
+                    })();
+                    """
+                    
+                    try:
+                        self.driver.execute_script(scroll_script)
+                        logger.info(f"Ejecutando scroll en contenedores SAP (intento {attempt+1})")
+                    except Exception as e:
+                        logger.debug(f"Error en script de scroll: {e}")
+                        
+                        # Alternativa: scroll normal
+                        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                
+                # 3. Esperar carga de contenido
+                time.sleep(2)
+                
+                # 4. Contar filas actualmente visibles
+                rows = find_table_rows(self.driver, highlight=False)
+                current_rows_count = len(rows) if rows else 0
+                
+                # Verificar si hay contenido nuevo usando texto de filas
+                new_content_found = False
+                if rows:
+                    for row in rows:
+                        try:
+                            row_text = row.text.strip()
+                            # Solo considerar filas con contenido sustancial
+                            if row_text and len(row_text) > 15 and row_text not in unique_content:
+                                unique_content.add(row_text)
+                                new_content_found = True
+                        except:
+                            pass
+                
+                # Registrar progreso periódicamente
+                if attempt % 5 == 0 or new_content_found:
+                    logger.info(f"Intento {attempt+1}: {len(unique_content)} filas únicas detectadas de {total_expected} esperadas")
+                
+                # Verificación de progreso
+                if current_rows_count > previous_rows_count or new_content_found:
+                    # Hay progreso, reiniciar contador de intentos sin cambios
                     no_change_count = 0
-
+                    previous_rows_count = current_rows_count
+                    loaded_rows = max(loaded_rows, current_rows_count)
+                else:
+                    no_change_count += 1
                     
-
-                previous_rows_count = current_rows_count
-
+                    # Si no hay cambios por varios intentos, aplicar estrategias alternativas
+                    if no_change_count % 3 == 0:
+                        # Cada 3 intentos sin cambios, aplicar estrategia diferente
+                        
+                        if no_change_count % 6 == 0:
+                            # Estrategia 1: Enviar tecla Page Down
+                            try:
+                                body = self.driver.find_element(By.TAG_NAME, "body")
+                                body.send_keys(Keys.PAGE_DOWN)
+                                logger.info("Aplicando estrategia de Page Down")
+                            except:
+                                pass
+                        else:
+                            # Estrategia 2: Scroll progresivo
+                            try:
+                                height = self.driver.execute_script("return document.body.scrollHeight")
+                                # Hacer scroll progresivo en varias etapas
+                                for step in [0.3, 0.6, 0.9]:
+                                    self.driver.execute_script(f"window.scrollTo(0, {int(height * step)});")
+                                    time.sleep(0.3)
+                                logger.info("Aplicando estrategia de scroll progresivo")
+                            except:
+                                pass
                 
-
-                # Si se alcanzó o superó el número esperado, terminar
-
-                if current_rows_count >= total_expected:
-
-                    logger.info(f"Se han cargado {current_rows_count} filas (>= {total_expected} esperadas)")
-
+                # Criterios de finalización mejorados
+                if no_change_count >= 8:
+                    # Si no hay cambios después de varios intentos con todas las estrategias
+                    logger.info(f"No hay nuevos elementos después de {no_change_count} intentos, finalizando")
                     break
-
-                
-
-                # Tiempo adaptativo de espera basado en el rendimiento
-
-                wait_time = self._calculate_adaptive_wait_time(no_change_count, current_rows_count)
-
-                time.sleep(wait_time)
-
                     
-
+                # Si llegamos al número esperado de elementos
+                if len(unique_content) >= total_expected:
+                    logger.info(f"Se han cargado {len(unique_content)} elementos, ≥ {total_expected} esperados")
+                    break
+                    
             except Exception as e:
-
                 logger.warning(f"Error durante el scroll en intento {attempt+1}: {e}")
-
-            
-
-        # Calcular y reportar métricas de éxito
-
-        coverage = (previous_rows_count / total_expected) * 100 if total_expected > 0 else 0
-
-        logger.info(f"Scroll completado. Cobertura: {coverage:.2f}% ({previous_rows_count}/{total_expected})")
-
         
-
-        return previous_rows_count
-
+        # Calculamos el resultado final
+        coverage = (len(unique_content) / total_expected) * 100 if total_expected > 0 else 0
+        logger.info(f"Scroll completado. Cobertura: {coverage:.2f}% ({len(unique_content)}/{total_expected})")
+        
+        return len(unique_content)
         
 
     def _scroll_standard_ui5_table(self):
@@ -7021,360 +7033,6 @@ class SAPBrowser:
   
 
   
-
-    def extract_issues_data_optimized(self):
-
-        """
-
-        Extrae datos de issues usando métodos optimizados basados en la estructura del DOM.
-
-        
-
-        Returns:
-
-            list: Lista de diccionarios con los datos de cada issue
-
-        """
-
-        try:
-
-            logger.info("Iniciando extracción optimizada de issues...")
-
-            
-
-            # Esperar a que cargue la página inicial
-
-            logger.info("Esperando que cargue la página inicial...")
-
-            time.sleep(3)
-
-            
-
-            # Ejecutar optimizaciones en la página
-
-            try:
-
-                optimization_script = """
-
-                // Deshabilitar animaciones
-
-                document.querySelectorAll('*').forEach(el => {
-
-                    if(el.style) {
-
-                        el.style.animationDuration = '0.001s';
-
-                        el.style.transitionDuration = '0.001s';
-
-                    }
-
-                });
-
-                
-
-                // Mejorar velocidad de scroll
-
-                document.body.style.overflow = 'auto';
-
-                
-
-                // Deshabilitar indicadores de carga
-
-                document.querySelectorAll('.sapUiLocalBusyIndicator').forEach(el => {
-
-                    if(el) el.style.display = 'none';
-
-                });
-
-                
-
-                return true;
-
-                """
-
-                self.driver.execute_script(optimization_script)
-
-                logger.info("Página optimizada para extracción")
-
-            except Exception as e:
-
-                logger.debug(f"Error optimizando página: {e}")
-
-            
-
-            # Obtener el número exacto de issues desde la pestaña "Issues (X)"
-
-            issue_count = None
-
-            try:
-
-                tab_element = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Issues') and contains(text(), '(')]")
-
-                tab_text = tab_element.text
-
-                match = re.search(r'\((\d+)\)', tab_text)
-
-                if match:
-
-                    issue_count = int(match.group(1))
-
-                    logger.info(f"Número exacto de issues según la pestaña: {issue_count}")
-
-            except Exception as e:
-
-                logger.warning(f"No se pudo determinar el número exacto de issues: {e}")
-
-                issue_count = 100  # Valor predeterminado
-
-            
-
-            # Hacer scroll para cargar todos los elementos
-
-            logger.info(f"Haciendo scroll para cargar hasta {issue_count} issues...")
-
-            previous_rows_count = 0
-
-            no_change_count = 0
-
-            max_scroll_attempts = 50  # Limitar intentos de scroll
-
-            
-
-            for attempt in range(max_scroll_attempts):
-
-                # Scroll al final de la página
-
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-                time.sleep(0.5)  # Breve pausa para que carguen elementos
-
-                
-
-                # Verificar cuántas filas tenemos
-
-                rows = find_table_rows_optimized(self.driver)
-
-                current_rows_count = len(rows)
-
-                
-
-                # Registrar progreso periodicamente
-
-                if attempt % 5 == 0:
-
-                    logger.info(f"Scroll intento {attempt+1}: {current_rows_count} filas cargadas")
-
-                
-
-                # Verificar si hemos cargado todas las filas esperadas
-
-                if current_rows_count >= issue_count:
-
-                    logger.info(f"Se han cargado todas las {issue_count} filas esperadas")
-
-                    break
-
-                    
-
-                # Verificar si no ha habido cambios
-
-                if current_rows_count == previous_rows_count:
-
-                    no_change_count += 1
-
-                    
-
-                    # Si no hay cambios después de varios intentos, probablemente ya cargamos todo
-
-                    if no_change_count >= 5:
-
-                        logger.info(f"No hay más filas para cargar después de {no_change_count} intentos")
-
-                        break
-
-                else:
-
-                    no_change_count = 0
-
-                    
-
-                previous_rows_count = current_rows_count
-
-                
-
-                # Intentar métodos alternativos de scroll cada 10 intentos
-
-                if attempt % 10 == 9:
-
-                    try:
-
-                        # Método alternativo: usar teclas para scroll
-
-                        body = self.driver.find_element(By.TAG_NAME, "body")
-
-                        body.send_keys(Keys.END)
-
-                        time.sleep(0.5)
-
-                        
-
-                        # Intentar hacer clic en botones "Show More" o "Load More"
-
-                        load_buttons = self.driver.find_elements(By.XPATH, 
-
-                            "//button[contains(text(), 'More') or contains(text(), 'más')] | " +
-
-                            "//span[contains(text(), 'More') or contains(text(), 'más')]")
-
-                        
-
-                        for btn in load_buttons:
-
-                            if btn.is_displayed():
-
-                                try:
-
-                                    btn.click()
-
-                                    logger.info("Se hizo clic en botón 'Load More'")
-
-                                    time.sleep(1)
-
-                                    break
-
-                                except:
-
-                                    pass
-
-                    except:
-
-                        pass
-
-            
-
-            # Obtener las filas finales después del scroll
-
-            logger.info("Extrayendo datos de las filas...")
-
-            rows = find_table_rows_optimized(self.driver)
-
-            
-
-            if not rows:
-
-                logger.warning("No se encontraron filas para extraer datos")
-
-                return []
-
-            
-
-            logger.info(f"Procesando {len(rows)} filas encontradas")
-
-            
-
-            # Extraer y procesar datos
-
-            issues_data = []
-
-            for index, row in enumerate(rows):
-
-                try:
-
-                    # Obtener celdas con método optimizado
-
-                    cells = get_row_cells_optimized(row)
-
-                    
-
-                    if not cells or len(cells) < 3:
-
-                        logger.debug(f"Fila {index} no tiene suficientes celdas, saltando...")
-
-                        continue
-
-                    
-
-                    # Extraer datos de las celdas
-
-                    issue_data = {}
-
-                    
-
-                    # Si tenemos suficientes celdas, extraer por posición
-
-                    column_names = ["Title", "Type", "Priority", "Status", "Deadline", "Due Date", "Created By", "Created On"]
-
-                    
-
-                    for i, name in enumerate(column_names):
-
-                        if i < len(cells):
-
-                            cell_text = cells[i].text.strip() if cells[i].text else ""
-
-                            issue_data[name] = cell_text
-
-                        else:
-
-                            issue_data[name] = ""
-
-                    
-
-                    # Verificar que tenemos al menos un título (dato mínimo)
-
-                    if not issue_data["Title"]:
-
-                        # Si no tenemos título, pero tenemos texto en la fila
-
-                        row_text = row.text.strip() if row.text else ""
-
-                        if row_text:
-
-                            # Usar la primera línea como título
-
-                            lines = row_text.split('\n')
-
-                            issue_data["Title"] = lines[0]
-
-                    
-
-                    # Filtrar elementos de control de UI
-
-                    if issue_data["Title"] and not any(control in issue_data["Title"].lower() 
-
-                                                for control in ["show more", "show less", "load more"]):
-
-                        issues_data.append(issue_data)
-
-                    
-
-                except Exception as e:
-
-                    logger.debug(f"Error al procesar fila {index}: {e}")
-
-            
-
-            logger.info(f"Extracción completada: {len(issues_data)} issues extraídos")
-
-            
-
-            # Verificar si tenemos menos de lo esperado
-
-            if len(issues_data) < issue_count:
-
-                logger.warning(f"Se extrajeron menos issues ({len(issues_data)}) que los esperados ({issue_count})")
-
-            
-
-            return issues_data
-
-            
-
-        except Exception as e:
-
-            logger.error(f"Error en la extracción de datos: {e}")
-
-            return []      
 
         
 
@@ -11022,3 +10680,1335 @@ class SAPBrowser:
             logger.error(f"Error al verificar panel de columnas: {e}")
 
             return False
+
+
+
+
+
+    def _extract_row_data_with_headers(self, cells, header_map):
+        """
+        Extrae datos de una fila usando el mapeo de encabezados.
+        Soporta hasta 18 columnas.
+        
+        Args:
+            cells (list): Lista de celdas WebElement
+            header_map (dict): Mapeo de nombres de encabezados a índices
+            
+        Returns:
+            dict: Diccionario con los datos extraídos
+        """
+        try:
+            # Inicializar el diccionario con las 18 columnas posibles
+            issue_data = {
+                'Title': '',
+                'Type': '',
+                'Priority': '',
+                'Status': '',
+                'Deadline': '',
+                'Due Date': '',
+                'Created By': '',
+                'Created On': '',
+                'SAP Category': '',
+                'Assigned To': '',
+                'Responsible Team': '',
+                'Last Change': '',
+                'Updated By': '',
+                'Description': '',
+                'Notes': '',
+                'Solution': '',
+                'External ID': '',
+                'Customer': ''
+            }
+            
+            # Mapeo de nombres de encabezados a claves en nuestro diccionario
+            header_mappings = {
+                'TITLE': 'Title',
+                'TYPE': 'Type',
+                'PRIORITY': 'Priority',
+                'STATUS': 'Status',
+                'DEADLINE': 'Deadline',
+                'DUE DATE': 'Due Date',
+                'CREATED BY': 'Created By',
+                'CREATED ON': 'Created On',
+                'SAP CATEGORY': 'SAP Category',
+                'ASSIGNED TO': 'Assigned To',
+                'RESPONSIBLE TEAM': 'Responsible Team',
+                'LAST CHANGE': 'Last Change',
+                'UPDATED BY': 'Updated By',
+                'DESCRIPTION': 'Description',
+                'NOTES': 'Notes',
+                'SOLUTION': 'Solution',
+                'EXTERNAL ID': 'External ID',
+                'CUSTOMER': 'Customer',
+                # Mapeos alternativos para diferentes nomenclaturas
+                'ISSUE TITLE': 'Title',
+                'NAME': 'Title',
+                'ISSUE': 'Title',
+                'CATEGORY': 'SAP Category',
+                'PRIO': 'Priority',
+                'STATE': 'Status',
+                'DUE': 'Due Date',
+                'RESP TEAM': 'Responsible Team',
+                'TEAM': 'Responsible Team',
+                'ASSIGNED': 'Assigned To',
+                'OWNER': 'Assigned To',
+                'UPDATED ON': 'Last Change',
+                'MODIFIED BY': 'Updated By',
+                'ID': 'External ID',
+                'COMMENT': 'Notes'
+            }
+            
+            
+            
+            
+            
+            
+            
+    # Extraer valores usando el mapa de encabezados
+            for header, index in header_map.items():
+                if index < len(cells):
+                    # Buscar la clave correspondiente
+                    header_upper = header.upper()
+                    matched = False
+                    
+                    # Buscar coincidencias exactas o parciales
+                    for pattern, key in header_mappings.items():
+                        if pattern == header_upper or header_upper.startswith(pattern) or pattern in header_upper:
+                            cell_text = cells[index].text.strip() if cells[index].text else ''
+                            issue_data[key] = cell_text
+                            matched = True
+                            break
+                    
+                    # Si no se encontró coincidencia para este encabezado, intentar inferir el tipo de dato
+                    if not matched and header_upper:
+                        cell_text = cells[index].text.strip() if cells[index].text else ''
+                        
+                        if cell_text:
+                            # Intentar inferir el tipo de dato basado en el contenido
+                            if any(date_marker in cell_text for date_marker in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+                                # Parece una fecha - buscar campo de fecha vacío
+                                for date_field in ['Last Change', 'Created On', 'Due Date', 'Deadline']:
+                                    if not issue_data[date_field]:
+                                        issue_data[date_field] = cell_text
+                                        break
+                            
+                            elif cell_text.startswith('I') and len(cell_text) > 1 and cell_text[1:].isdigit():
+                                # Parece un ID de usuario SAP - buscar campo de usuario vacío
+                                for user_field in ['Created By', 'Assigned To', 'Updated By']:
+                                    if not issue_data[user_field]:
+                                        issue_data[user_field] = cell_text
+                                        break
+                            
+                            elif cell_text.upper() in ['OPEN', 'DONE', 'IN PROGRESS', 'READY', 'CLOSED']:
+                                # Parece un estado
+                                if not issue_data['Status']:
+                                    issue_data['Status'] = cell_text
+                            
+                            elif cell_text.upper() in ['HIGH', 'MEDIUM', 'LOW', 'VERY HIGH']:
+                                # Parece una prioridad
+                                if not issue_data['Priority']:
+                                    issue_data['Priority'] = cell_text
+                                    
+                                    
+                                    
+                                    
+                                    
+                                    
+    # Si no se encontró un título, usar la primera celda
+            if not issue_data['Title'] and len(cells) > 0:
+                issue_data['Title'] = cells[0].text.strip() if cells[0].text else "Issue sin título"
+            
+            # Procesar y normalizar los datos
+            self._process_issue_data(issue_data)
+            
+            return issue_data
+        
+        except Exception as e:
+            logger.debug(f"Error al extraer datos de fila con encabezados: {e}")
+            
+            # En caso de error, intentar extraer al menos los datos básicos
+            if len(cells) > 0:
+                basic_data = {'Title': cells[0].text.strip() if cells[0].text else "Issue sin título"}
+                for i in range(1, min(len(cells), 8)):
+                    field_name = ['Type', 'Priority', 'Status', 'Deadline', 'Due Date', 'Created By', 'Created On'][i-1]
+                    basic_data[field_name] = cells[i].text.strip() if cells[i].text else ""
+                
+                # Inicializar campos restantes
+                for field in ['SAP Category', 'Assigned To', 'Responsible Team', 'Last Change', 
+                            'Updated By', 'Description', 'Notes', 'Solution', 'External ID', 'Customer']:
+                    basic_data[field] = ""
+                    
+                return basic_data        
+        
+        
+    def _process_issue_data(self, issue_data):
+        """
+        Procesa y normaliza los datos del issue para garantizar consistencia.
+        
+        Args:
+            issue_data (dict): Datos del issue a procesar
+            
+        Returns:
+            dict: Datos procesados y normalizados
+        """
+        try:
+            # 1. Normalizar Status
+            if issue_data['Status']:
+                status_text = issue_data['Status'].upper()
+                if 'OPEN' in status_text:
+                    issue_data['Status'] = 'OPEN'
+                elif 'DONE' in status_text:
+                    issue_data['Status'] = 'DONE'
+                elif 'IN PROGRESS' in status_text or 'IN-PROGRESS' in status_text:
+                    issue_data['Status'] = 'IN PROGRESS'
+                elif 'READY' in status_text:
+                    issue_data['Status'] = 'READY'
+                elif 'CLOSED' in status_text:
+                    issue_data['Status'] = 'CLOSED'
+            
+            # 2. Normalizar Priority
+            if issue_data['Priority']:
+                priority_text = issue_data['Priority'].upper()
+                if 'VERY HIGH' in priority_text or 'VERY-HIGH' in priority_text or 'VERY_HIGH' in priority_text:
+                    issue_data['Priority'] = 'Very High'
+                elif 'HIGH' in priority_text and 'VERY' not in priority_text:
+                    issue_data['Priority'] = 'High'
+                elif 'MEDIUM' in priority_text or 'MED' in priority_text:
+                    issue_data['Priority'] = 'Medium'
+                elif 'LOW' in priority_text:
+                    issue_data['Priority'] = 'Low'
+            
+            # 3. Verificar errores de desplazamiento de columnas
+            # Si Type es igual a Title, probablemente hay un error de desplazamiento
+            if issue_data['Type'] == issue_data['Title'] and issue_data['Title']:
+                logger.debug(f"Posible error de desplazamiento detectado para issue '{issue_data['Title']}'")
+                
+                # Intentar corregir desplazamiento
+                issue_data['Type'] = issue_data['Priority'] if issue_data['Priority'] != issue_data['Title'] else ""
+                issue_data['Priority'] = issue_data['Status'] if issue_data['Status'] != issue_data['Type'] else ""
+                issue_data['Status'] = issue_data['Deadline'] if issue_data['Deadline'] != issue_data['Priority'] else ""
+            
+            # 4. Limpiar campos vacíos o con valores no válidos
+            for field in issue_data:
+                # Convertir valores None a string vacía
+                if issue_data[field] is None:
+                    issue_data[field] = ""
+                    
+                # Asegurar que todos los valores son strings
+                if not isinstance(issue_data[field], str):
+                    issue_data[field] = str(issue_data[field])
+                    
+                # Recortar textos extremadamente largos para Excel
+                if len(issue_data[field]) > 32000:
+                    issue_data[field] = issue_data[field][:32000] + "..."
+            
+            return issue_data
+            
+        except Exception as e:
+            logger.error(f"Error al procesar datos de issue: {e}")
+            return issue_data  # Devolver datos sin procesar en caso de error
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    def extract_all_issues(self):
+        """
+        Método robusto para extraer issues con múltiples estrategias de scroll.
+        
+        Returns:
+            list: Lista de diccionarios con datos de issues
+        """
+        try:
+            logger.info("🚀 Iniciando extracción dinámica de issues...")
+            
+            # 1. Optimizar rendimiento de página
+            try:
+                from browser.element_finder import optimize_page_performance
+                optimize_page_performance(self.driver)
+                logger.info("✅ Rendimiento de página optimizado")
+            except Exception as perf_error:
+                logger.warning(f"⚠️ Error en optimización de rendimiento: {perf_error}")
+            
+            # 2. Detectar número total de issues
+            total_issues = self._detect_total_issues_from_tab()
+            logger.info(f"📊 Total de issues detectados: {total_issues}")
+            
+            # 3. Estrategias de scroll múltiples
+            scroll_strategies = [
+                self._scroll_for_more_items,
+                self._scroll_standard_ui5_table,
+                self._scroll_responsive_table,
+                self._scroll_grid_table
+            ]
+            
+            # Ejecutar cada estrategia de scroll
+            for strategy in scroll_strategies:
+                try:
+                    logger.info(f"🔄 Aplicando estrategia de scroll: {strategy.__name__}")
+                    strategy(total_issues)
+                except Exception as scroll_error:
+                    logger.debug(f"❌ Error en estrategia de scroll {strategy.__name__}: {scroll_error}")
+            
+            # 4. Esperar un momento después de los scrolls
+            time.sleep(3)
+            
+            # 5. Detectar filas finales
+            final_rows = find_table_rows_optimized(self.driver)
+            logger.info(f"📝 Total de filas detectadas: {len(final_rows)}")
+            
+            # 6. Detectar encabezados para mapeo de columnas
+            header_map = self._detect_table_headers_enhanced()
+            logger.info(f"📑 Encabezados detectados: {header_map}")
+            
+            # 7. Extraer datos de las filas
+            issues_data = []
+            for index, row in enumerate(final_rows):
+                try:
+                    # Obtener celdas de la fila
+                    cells = get_row_cells_optimized(row)
+                    
+                    if not cells or len(cells) < 3:
+                        logger.debug(f"Fila {index} sin suficientes celdas, saltando...")
+                        continue
+                    
+                    # Extraer datos usando encabezados
+                    issue_data = self._extract_row_data_with_headers(cells, header_map)
+                    
+                    # Validar y agregar issue
+                    if (
+                        issue_data and 
+                        issue_data.get('Title') and 
+                        not any(control in issue_data['Title'].lower() for control in ['show more', 'load more'])
+                    ):
+                        issues_data.append(issue_data)
+                    
+                    # Actualizar progreso
+                    if (index + 1) % 20 == 0:
+                        logger.info(f"✏️ Procesadas {index + 1} filas de {len(final_rows)}")
+                
+                except Exception as row_error:
+                    logger.debug(f"Error procesando fila {index}: {row_error}")
+            
+            # 8. Validación final
+            if not issues_data:
+                logger.warning("❌ No se encontraron issues después de la extracción")
+            else:
+                logger.info(f"✅ Issues extraídos: {len(issues_data)}")
+            
+            return issues_data
+        
+        except Exception as e:
+            logger.error(f"Error crítico en extracción de issues: {e}")
+            return []
+    
+    
+    
+    
+    
+
+
+
+
+
+
+    def optimize_sap_table_loading(self, total_expected_rows=100):
+        """
+        Método integral para optimizar la carga de tablas SAP con múltiples estrategias.
+        
+        Args:
+            total_expected_rows (int): Número aproximado de filas esperadas
+        
+        Returns:
+            int: Número de filas cargadas
+        """
+        try:
+            logger.info(f"🚀 Iniciando optimización de carga de tabla SAP: {total_expected_rows} filas esperadas")
+            
+            # Estrategias de scroll y carga
+            scroll_strategies = [
+                self._scroll_sap_list_container,
+                self._scroll_sap_grid_container,
+                self._scroll_page_bottom,
+                self._click_show_more_buttons
+            ]
+            
+            unique_content = set()
+            loaded_rows = 0
+            max_attempts = 10
+            
+            for attempt in range(max_attempts):
+                logger.info(f"🔄 Intento de carga {attempt + 1}/{max_attempts}")
+                
+                # Aplicar cada estrategia de scroll
+                for strategy in scroll_strategies:
+                    try:
+                        strategy()
+                        time.sleep(2)  # Esperar a que carguen nuevos elementos
+                    except Exception as strategy_error:
+                        logger.debug(f"Error en estrategia {strategy.__name__}: {strategy_error}")
+                
+                # Detectar filas actuales
+                current_rows = find_table_rows_optimized(self.driver)
+                
+                # Verificar contenido único
+                new_content_found = False
+                for row in current_rows:
+                    try:
+                        row_text = row.text.strip()
+                        if row_text and len(row_text) > 15 and row_text not in unique_content:
+                            unique_content.add(row_text)
+                            new_content_found = True
+                    except:
+                        pass
+                
+                # Actualizar conteo de filas
+                loaded_rows = len(unique_content)
+                
+                # Criterios de finalización
+                coverage = (loaded_rows / total_expected_rows * 100) if total_expected_rows > 0 else 0
+                logger.info(f"📊 Progreso: {loaded_rows} filas ({coverage:.2f}%)")
+                
+                if (
+                    loaded_rows >= total_expected_rows or 
+                    coverage >= 95 or 
+                    not new_content_found
+                ):
+                    logger.info("✅ Carga de tabla completada")
+                    break
+            
+            logger.info(f"🏁 Carga finalizada: {loaded_rows} filas únicas")
+            return loaded_rows
+        
+        except Exception as e:
+            logger.error(f"Error crítico en optimización de tabla: {e}")
+            return 0
+
+    def _scroll_sap_list_container(self):
+        """Scroll en contenedores de lista SAP"""
+        try:
+            self.driver.execute_script("""
+                const containers = [
+                    document.querySelector('.sapMList'),
+                    document.querySelector('.sapMListItems'),
+                    document.querySelector('.sapMTable')
+                ];
+                
+                containers.forEach(container => {
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                });
+            """)
+            time.sleep(1)
+        except Exception as e:
+            logger.debug(f"Error en scroll de lista SAP: {e}")
+
+    def _scroll_sap_grid_container(self):
+        """Scroll en contenedores de grid SAP"""
+        try:
+            self.driver.execute_script("""
+                const gridContainers = [
+                    document.querySelector('[role="grid"]'),
+                    document.querySelector('.sapUiTable'),
+                    document.querySelector('.sapUiTableCtrlScr')
+                ];
+                
+                gridContainers.forEach(container => {
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                });
+            """)
+            time.sleep(1)
+        except Exception as e:
+            logger.debug(f"Error en scroll de grid SAP: {e}")
+
+    def _scroll_page_bottom(self):
+        """Scroll al final de la página"""
+        try:
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+        except Exception as e:
+            logger.debug(f"Error en scroll de página: {e}")    
+    
+    
+    
+    
+                
+    def _detect_total_issues_from_tab(self):
+        """
+        Detecta el número total de issues directamente desde la pestaña "Issues (n)"
+        utilizando múltiples estrategias para mayor robustez.
+        
+        Returns:
+            int: Número total de issues o 0 si no se puede detectar
+        """
+        try:
+            logger.info("Detectando número total de issues desde la pestaña...")
+            
+            # Estrategia 1: Buscar específicamente la pestaña Issues con número
+            tab_selectors = [
+                "//div[contains(@class, 'sapMITBTab')]//*[contains(text(), 'Issues')]",
+                "//div[contains(@class, 'sapMITBContent')]//span[contains(text(), 'Issues')]",
+                "//div[@role='tab']//*[contains(text(), 'Issues')]",
+                "//li[@role='tab']//*[contains(text(), 'Issues')]",
+                "//div[contains(text(), 'Issues') and contains(text(), '(')]",
+                "//span[contains(text(), 'Issues') and contains(text(), '(')]",
+                "//li[contains(text(), 'Issues') and contains(text(), '(')]"
+            ]
+            
+            for selector in tab_selectors:
+                try:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    for element in elements:
+                        if element.is_displayed():
+                            text = element.text.strip()
+                            if '(' in text and ')' in text:
+                                # Extraer número entre paréntesis
+                                match = re.search(r'\((\d+)\)', text)
+                                if match:
+                                    total = int(match.group(1))
+                                    logger.info(f"Total de issues detectado: {total} (desde pestaña)")
+                                    return total
+                except Exception as e:
+                    logger.debug(f"Error con selector {selector}: {e}")
+                    continue
+            
+            # Estrategia 2: Usar JavaScript para buscar en todos los elementos visibles
+            js_script = """
+            (function() {
+                // Buscar en todos los elementos visibles
+                var elements = document.querySelectorAll('*');
+                for (var i = 0; i < elements.length; i++) {
+                    var el = elements[i];
+                    if (el.offsetParent !== null) {  // Elemento visible
+                        var text = el.textContent || '';
+                        
+                        // Buscar patrón "Issues(número)" o "Issues (número)"
+                        var match = text.match(/Issues\s*\((\d+)\)/i);
+                        if (match && match[1]) {
+                            return parseInt(match[1], 10);
+                        }
+                    }
+                }
+                
+                // Buscar patrón alternativo "N of M" o similar
+                var countElements = document.querySelectorAll('.sapMListNoData, .sapMMessageToast, .sapMListInfo');
+                for (var j = 0; j < countElements.length; j++) {
+                    var countEl = countElements[j];
+                    if (countEl.offsetParent !== null) {
+                        var countText = countEl.textContent || '';
+                        
+                        // Patrones como "10 of 103" o "Showing 10 of 103"
+                        var countMatch = countText.match(/\d+\s+of\s+(\d+)/i);
+                        if (countMatch && countMatch[1]) {
+                            return parseInt(countMatch[1], 10);
+                        }
+                    }
+                }
+                
+                return 0;  // No se encontró
+            })();
+            """
+            
+            result = self.driver.execute_script(js_script)
+            if result and result > 0:
+                logger.info(f"Total de issues detectado: {result} (mediante JavaScript)")
+                return result
+            
+            # Estrategia 3: Buscar en gráficos o estadísticas visibles
+            chart_selectors = [
+                "//div[contains(@class, 'sapSuiteUiCommonsChartItem')]",
+                "//div[contains(@class, 'sapVizFrame')]",
+                "//div[contains(@class, 'sapMPanel')]//div[contains(@class, 'sapMText')]"
+            ]
+            
+            for selector in chart_selectors:
+                elements = self.driver.find_elements(By.XPATH, selector)
+                for element in elements:
+                    if element.is_displayed():
+                        text = element.text.strip()
+                        # Buscar números que podrían ser el total
+                        numbers = re.findall(r'\b(\d+)\b', text)
+                        if numbers:
+                            # Tomar el número más grande como posible total
+                            largest = max([int(n) for n in numbers])
+                            if largest > 10:  # Asumir que es un total si es razonablemente grande
+                                logger.info(f"Posible total de issues detectado: {largest} (desde gráfico/panel)")
+                                return largest
+            
+            # Si aún no se ha detectado, intentar hacer clic en la pestaña Issues y luego buscar de nuevo
+            try:
+                issues_tab_selectors = [
+                    "//div[contains(text(), 'Issues')]",
+                    "//span[contains(text(), 'Issues')]",
+                    "//div[@role='tab' and contains(., 'Issues')]"
+                ]
+                
+                tab_clicked = False
+                for selector in issues_tab_selectors:
+                    elements = self.driver.find_elements(By.XPATH, selector)
+                    for element in elements:
+                        if element.is_displayed():
+                            # Hacer scroll al elemento para asegurar visibilidad
+                            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                            time.sleep(0.5)
+                            
+                            # Intentar hacer clic
+                            self.driver.execute_script("arguments[0].click();", element)
+                            logger.info(f"Clic en pestaña Issues realizado")
+                            tab_clicked = True
+                            time.sleep(1)
+                            break
+                    
+                    if tab_clicked:
+                        break
+                
+                if tab_clicked:
+                    # Intentar de nuevo detectar el número después del clic
+                    for selector in tab_selectors:
+                        elements = self.driver.find_elements(By.XPATH, selector)
+                        for element in elements:
+                            if element.is_displayed():
+                                text = element.text.strip()
+                                if '(' in text and ')' in text:
+                                    match = re.search(r'\((\d+)\)', text)
+                                    if match:
+                                        total = int(match.group(1))
+                                        logger.info(f"Total de issues detectado: {total} (después de clic en pestaña)")
+                                        return total
+            except Exception as e:
+                logger.debug(f"Error al intentar hacer clic en pestaña Issues: {e}")
+            
+            # Último recurso: Contar las filas visibles y asumir un número más alto
+            try:
+                rows = find_table_rows(self.driver, highlight=False)
+                if rows:
+                    visible_count = len(rows)
+                    # Asumir que hay más filas que no son visibles inicialmente
+                    estimated_total = max(visible_count * 3, 100)
+                    logger.warning(f"No se detectó total exacto de issues. Estimando {estimated_total} basado en {visible_count} filas visibles")
+                    return estimated_total
+            except Exception as e:
+                logger.debug(f"Error al contar filas visibles: {e}")
+            
+            # Si todo falla, usar un valor predeterminado
+            logger.warning("No se pudo detectar el número total de issues, usando valor predeterminado (100)")
+            return 100
+        
+        except Exception as e:
+            # Add a general exception handler to catch any unexpected errors
+            logger.error(f"Error al detectar número total de issues: {e}")
+            return 100  # Return default value in case of any unexpected error
+    
+    
+    
+    
+
+    def _scroll_for_more_items(self, total_expected=100, max_attempts=15):
+        """
+        Método avanzado para cargar todos los elementos en tablas SAP UI5/Fiori.
+        
+        Implementa múltiples estrategias de scroll para maximizar la carga de elementos.
+        
+        Args:
+            total_expected (int): Número total de elementos esperados
+            max_attempts (int): Número máximo de intentos de scroll
+        
+        Returns:
+            int: Número de elementos cargados
+        """
+        try:
+            logger.info(f"🔄 Iniciando scroll para cargar {total_expected} elementos...")
+            
+            # Conjunto para rastrear contenido único
+            unique_content = set()
+            previous_rows_count = 0
+            no_change_count = 0
+            loaded_rows = 0
+            
+            # Estrategias de scroll
+            scroll_strategies = [
+                # Scroll general de página
+                lambda: self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);"),
+                
+                # Scroll en contenedores SAP específicos
+                lambda: self.driver.execute_script("""
+                    var containers = [
+                        document.querySelector('.sapMList'),
+                        document.querySelector('.sapMListItems'),
+                        document.querySelector('.sapMTable'),
+                        document.querySelector('[role="grid"]')
+                    ];
+                    
+                    containers.forEach(function(container) {
+                        if (container) {
+                            container.scrollTop = container.scrollHeight;
+                        }
+                    });
+                """),
+                
+                # Intentar encontrar y hacer clic en botones "Show More"
+                lambda: self._click_show_more_buttons()
+            ]
+            
+            for attempt in range(max_attempts):
+                logger.info(f"🔍 Intento de scroll {attempt + 1}/{max_attempts}")
+                
+                # Aplicar estrategias de scroll
+                for strategy in scroll_strategies:
+                    try:
+                        strategy()
+                        time.sleep(2)  # Esperar a que carguen nuevos elementos
+                    except Exception as e:
+                        logger.debug(f"Error en estrategia de scroll: {e}")
+                
+                # Detectar filas actuales
+                try:
+                    rows = find_table_rows_optimized(self.driver, highlight=False)
+                    current_rows_count = len(rows) if rows else 0
+                    
+                    # Verificar contenido único
+                    new_content_found = False
+                    if rows:
+                        for row in rows:
+                            try:
+                                row_text = row.text.strip()
+                                if row_text and len(row_text) > 15 and row_text not in unique_content:
+                                    unique_content.add(row_text)
+                                    new_content_found = True
+                            except:
+                                pass
+                    
+                    # Evaluar progreso
+                    if current_rows_count > previous_rows_count or new_content_found:
+                        previous_rows_count = current_rows_count
+                        loaded_rows = max(loaded_rows, current_rows_count)
+                        no_change_count = 0
+                        
+                        # Registro de progreso
+                        coverage = (loaded_rows / total_expected * 100) if total_expected > 0 else 0
+                        logger.info(f"📊 Progreso: {loaded_rows} filas ({coverage:.2f}%)")
+                    else:
+                        no_change_count += 1
+                    
+                    # Criterios de finalización
+                    if (
+                        loaded_rows >= total_expected or 
+                        no_change_count >= 5 or 
+                        coverage >= 95
+                    ):
+                        logger.info("✅ Carga de elementos completada")
+                        break
+                
+                except Exception as detection_error:
+                    logger.debug(f"Error detectando filas: {detection_error}")
+            
+            logger.info(f"🏁 Carga finalizada: {loaded_rows} filas de {total_expected} esperadas")
+            return loaded_rows
+        
+        except Exception as e:
+            logger.error(f"Error crítico en scroll: {e}")
+            return 0
+        
+    def _click_show_more_buttons(self):
+        """
+        Método auxiliar para encontrar y hacer clic en botones 'Show More' o similares.
+        
+        Returns:
+            bool: True si se hizo clic en al menos un botón, False en caso contrario
+        """
+        try:
+            # Patrones de selectores para botones de carga adicional
+            show_more_patterns = [
+                "//span[contains(text(), 'Show More')]",
+                "//button[contains(text(), 'Show More')]",
+                "//div[contains(text(), 'Show More')]",
+                "//span[contains(text(), 'Load More')]",
+                "//button[contains(text(), 'Load More')]",
+                "//span[contains(text(), 'Más')]",
+                "//button[contains(text(), 'Más')]"
+            ]
+            
+            for xpath in show_more_patterns:
+                try:
+                    buttons = self.driver.find_elements(By.XPATH, xpath)
+                    for button in buttons:
+                        if button.is_displayed():
+                            logger.info(f"Haciendo clic en botón '{button.text}'")
+                            
+                            # Intentar JavaScript click primero
+                            try:
+                                self.driver.execute_script("arguments[0].click();", button)
+                            except:
+                                # Fallback a click normal
+                                button.click()
+                            
+                            time.sleep(1.5)  # Esperar a que carguen nuevos elementos
+                            return True
+                except Exception as e:
+                    logger.debug(f"Error con selector {xpath}: {e}")
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error en búsqueda de botones 'Show More': {e}")
+            return False
+
+
+
+
+
+    def extract_row_data(row):
+        """
+        Extract data from a single row with robust column mapping for SAP UI5 table.
+        
+        Args:
+            row (WebElement): Row WebElement to extract data from
+        
+        Returns:
+            dict: Extracted row data or None
+        """
+        try:
+            # Detailed column selectors for SAP UI5 table
+            cell_selectors = [
+                ".//div[@role='gridcell']",
+                ".//td",
+                ".//span[@role='gridcell']",
+                ".//*[contains(@class, 'sapMListTblCell')]"
+            ]
+            
+            # Precise column mapping based on the screenshot
+            column_map = [
+                'ISSUE TITLE', 'SAP CATEGORY', 'SO NUMBER', 'SESSION', 
+                'PROJECT', 'SYSTEM ID', 'PRIORITY', 'DUE DATE', 
+                'STATUS', 'COMMENT', 'LANGUAGE', 'ASSIGNED ROLE', 
+                'CREATED BY', 'CREATED ON', 'LAST CHANGED BY', 
+                'LAST CHANGED ON', 'SERVICE', 'DEADLINE'
+            ]
+            
+            # Find cells using multiple strategies
+            cells = None
+            for selector in cell_selectors:
+                try:
+                    cells = row.find_elements(By.XPATH, selector)
+                    if cells and len(cells) >= 5:  # Ensure we have meaningful data
+                        break
+                except Exception:
+                    continue
+            
+            if not cells or len(cells) < 5:
+                return None
+            
+            # Extract data with more robust text extraction
+            row_data = {}
+            for i, cell in enumerate(cells[:len(column_map)]):
+                try:
+                    # Multiple text extraction methods
+                    text_methods = [
+                        lambda c: c.text.strip(),
+                        lambda c: c.get_attribute('textContent').strip(),
+                        lambda c: c.get_attribute('innerText').strip(),
+                        lambda c: c.get_attribute('title').strip()
+                    ]
+                    
+                    cell_text = ''
+                    for method in text_methods:
+                        try:
+                            cell_text = method(cell)
+                            if cell_text:
+                                break
+                        except:
+                            continue
+                    
+                    # Store in row data if meaningful
+                    if cell_text and len(cell_text) > 1:
+                        row_data[column_map[i]] = cell_text
+                
+                except Exception as cell_error:
+                    logger.debug(f"Cell extraction error for column {column_map[i]}: {cell_error}")
+            
+            # Ensure we have meaningful data
+            return row_data if len(row_data) > 3 else None
+        
+        except Exception as row_error:
+            logger.error(f"Row extraction error: {row_error}")
+            return None
+        
+        
+        
+        
+                
+    def wait_for_table_load(self, timeout=30):
+        """
+        Wait for table to load with multiple load indicators.
+        
+        Args:
+            timeout (int): Maximum time to wait for table load, default 30 seconds
+        
+        Returns:
+            bool: True if table loaded successfully
+        """
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from selenium.webdriver.common.by import By
+            from selenium.common.exceptions import TimeoutException
+
+            load_indicators = [
+                (By.XPATH, "//div[contains(@class, 'sapMListNoData')]"),
+                (By.XPATH, "//div[contains(@class, 'sapUiLocalBusyIndicator')]"),
+                (By.XPATH, "//*[@role='row']"),
+                (By.XPATH, "//div[@role='gridcell']")
+            ]
+            
+            # Intentar cargar al menos uno de los indicadores
+            for indicator in load_indicators:
+                try:
+                    WebDriverWait(self.driver, timeout).until(
+                        EC.presence_of_element_located(indicator)
+                    )
+                    return True
+                except TimeoutException:
+                    logger.debug(f"Indicador no encontrado: {indicator}")
+                    continue
+            
+            logger.warning("No se encontraron indicadores de carga de tabla")
+            return False
+        
+        except Exception as e:
+            logger.error(f"Error al esperar la carga de la tabla: {e}")
+            return False
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    def advanced_table_detection():
+        """
+        Advanced table detection using JavaScript.
+        
+        Returns:
+            bool: True if table detected
+        """
+        detection_script = """
+        return (function() {
+            const tables = document.querySelectorAll(
+                '.sapMListTbl, [role="grid"], .sapUiTableCtrl'
+            );
+            return tables.length > 0;
+        })();
+        """
+        return self.driver.execute_script(detection_script)
+
+    def optimize_page_performance(self):
+        """
+        Optimize page performance for data extraction by disabling animations 
+        and removing loading indicators.
+        
+        Returns:
+            bool: True if optimization was successful
+        """
+        try:
+            perf_script = """
+            (function() {
+                // Disable animations
+                document.querySelectorAll('*').forEach(el => {
+                    if (el.style) {
+                        el.style.animationDuration = '0.001s';
+                        el.style.transitionDuration = '0.001s';
+                    }
+                });
+            
+                // Remove loading indicators
+                const indicators = [
+                    '.sapUiLocalBusyIndicator',
+                    '.sapMBusyIndicator'
+                ];
+            
+                indicators.forEach(selector => {
+                    const elements = document.querySelectorAll(selector);
+                    elements.forEach(el => {
+                        el.style.display = 'none';
+                    });
+                });
+            
+                return true;
+            })();
+            """
+            return self.driver.execute_script(perf_script)
+        except Exception as e:
+            logger.error(f"Error optimizing page performance: {e}")
+            return False
+
+
+
+
+
+
+
+
+
+
+
+
+    def find_table_rows_optimized(driver, highlight=False):
+        """
+        Encuentra filas de tabla en interfaces SAP UI5/Fiori con estrategias múltiples.
+        
+        Args:
+            driver: WebDriver de Selenium
+            highlight (bool): Si se debe resaltar la primera fila encontrada
+        
+        Returns:
+            list: Lista de elementos WebElement que representan filas
+        """
+        try:
+            logger.info("🔍 Buscando filas de tabla con selectores optimizados...")
+            
+            # Estrategias de selectores para encontrar filas
+            row_selector_strategies = [
+                # Selectores específicos de SAP UI5
+                {
+                    'selector': "//tr[contains(@class, 'sapMLIB') and not(contains(@class, 'sapMListTblHeader'))]",
+                    'description': "Filas estándar SAP con clase sapMLIB"
+                },
+                {
+                    'selector': "//div[@role='row' and not(contains(@class, 'sapUiTableHeaderRow'))]",
+                    'description': "Filas con rol de fila en grid"
+                },
+                {
+                    'selector': "//li[contains(@class, 'sapMLIB') and not(contains(@class, 'sapMListNoData'))]",
+                    'description': "Filas en vista de lista SAP"
+                },
+                {
+                    'selector': "//div[contains(@class, 'sapMListItems')]/div[contains(@class, 'sapMLIB')]",
+                    'description': "Filas en contenedor de lista SAP"
+                }
+            ]
+            
+            # Encontrar filas válidas
+            valid_rows = []
+            for strategy in row_selector_strategies:
+                try:
+                    # Buscar elementos con el selector actual
+                    rows = driver.find_elements(By.XPATH, strategy['selector'])
+                    
+                    # Filtrar filas válidas
+                    filtered_rows = [
+                        row for row in rows 
+                        if (
+                            row.is_displayed() and  # Visible
+                            row.text and  # Tiene contenido
+                            len(row.text.strip()) > 5  # Más de 5 caracteres
+                        )
+                    ]
+                    
+                    # Si encontramos filas, registrar y agregar
+                    if filtered_rows:
+                        logger.info(f"✅ Encontradas {len(filtered_rows)} filas con selector: {strategy['description']}")
+                        valid_rows.extend(filtered_rows)
+                        break  # Salir después de encontrar filas válidas
+                
+                except Exception as selector_error:
+                    logger.debug(f"❌ Error con selector {strategy['selector']}: {selector_error}")
+            
+            # Método de último recurso: JavaScript para encontrar filas
+            if not valid_rows:
+                try:
+                    js_rows_script = """
+                    function findTableRows() {
+                        const potentialRowSelectors = [
+                            '.sapMLIB',
+                            '[role="row"]',
+                            '.sapMListItems > div',
+                            'tr:not(.sapMListTblHeader)'
+                        ];
+                        
+                        for (let selector of potentialRowSelectors) {
+                            const rows = document.querySelectorAll(selector);
+                            const validRows = Array.from(rows).filter(row => 
+                                row.offsetParent !== null &&  // Visible
+                                row.textContent.trim().length > 5  // Contenido significativo
+                            );
+                            
+                            if (validRows.length > 0) {
+                                return validRows;
+                            }
+                        }
+                        
+                        return [];
+                    }
+                    
+                    return findTableRows();
+                    """
+                    
+                    js_rows = driver.execute_script(js_rows_script)
+                    
+                    if js_rows:
+                        logger.info(f"✅ Encontradas {len(js_rows)} filas mediante JavaScript")
+                        valid_rows = js_rows
+                
+                except Exception as js_error:
+                    logger.error(f"❌ Error en búsqueda JavaScript de filas: {js_error}")
+            
+            # Resaltar primera fila si se solicita
+            if highlight and valid_rows:
+                try:
+                    driver.execute_script(
+                        "arguments[0].style.border='3px solid red'", 
+                        valid_rows[0]
+                    )
+                except:
+                    logger.debug("No se pudo resaltar la primera fila")
+            
+            logger.info(f"🏁 Total de filas encontradas: {len(valid_rows)}")
+            return valid_rows
+        
+        except Exception as e:
+            logger.error(f"Error crítico al buscar filas: {e}")
+            return []    
+            
+    def extract_issues_data_optimized(self):
+        """
+        Extrae datos de issues usando métodos optimizados con soporte para 18 columnas.
+        
+        Returns:
+            list: Lista de diccionarios con los datos de cada issue
+        """
+        try:
+            logger.info("Iniciando extracción optimizada de issues con soporte para 18 columnas...")
+            
+            # Esperar a que cargue la página inicial
+            logger.info("Esperando que cargue la página inicial...")
+            time.sleep(3)
+            
+            # Ejecutar optimizaciones en la página
+            try:
+                optimization_script = """
+                // Deshabilitar animaciones
+                document.querySelectorAll('*').forEach(el => {
+                    if(el.style) {
+                        el.style.animationDuration = '0.001s';
+                        el.style.transitionDuration = '0.001s';
+                    }
+                });
+                
+                // Mejorar velocidad de scroll
+                document.body.style.overflow = 'auto';
+                
+                // Deshabilitar indicadores de carga
+                document.querySelectorAll('.sapUiLocalBusyIndicator').forEach(el => {
+                    if(el) el.style.display = 'none';
+                });
+                
+                return true;
+                """
+                self.driver.execute_script(optimization_script)
+                logger.info("Página optimizada para extracción")
+            except Exception as e:
+                logger.debug(f"Error optimizando página: {e}")
+            
+            # Obtener el número exacto de issues desde la pestaña "Issues (X)"
+            issue_count = None
+            try:
+                tab_element = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Issues') and contains(text(), '(')]")
+                tab_text = tab_element.text
+                match = re.search(r'\((\d+)\)', tab_text)
+                if match:
+                    issue_count = int(match.group(1))
+                    logger.info(f"Número exacto de issues según la pestaña: {issue_count}")
+            except Exception as e:
+                logger.warning(f"No se pudo determinar el número exacto de issues: {e}")
+                issue_count = 100  # Valor predeterminado
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+                
+    # Las filas ya deberían estar cargadas por el método scroll_to_load_all_items
+            rows = find_table_rows_optimized(self.driver)
+            
+            if not rows:
+                logger.warning("No se encontraron filas para extraer datos")
+                return []
+                
+            logger.info(f"Procesando {len(rows)} filas encontradas")
+            
+            # Detectar encabezados para mapear columnas correctamente
+            header_map = self._detect_table_headers_enhanced()
+            logger.info(f"Encabezados detectados: {header_map}")
+            
+            # Extraer y procesar datos
+            issues_data = []
+            for index, row in enumerate(rows):
+                try:
+                    # Obtener celdas con método optimizado
+                    cells = get_row_cells_optimized(row)
+                    
+                    if not cells or len(cells) < 3:
+                        logger.debug(f"Fila {index} no tiene suficientes celdas, saltando...")
+                        continue
+                    
+                    # Extraer datos de las celdas con soporte para 18 columnas
+                    issue_data = self._extract_row_data_with_headers(cells, header_map)
+                    
+                    # Verificar que tenemos al menos un título (dato mínimo)
+                    if not issue_data.get("Title"):
+                        # Si no tenemos título, pero tenemos texto en la fila
+                        row_text = row.text.strip() if row.text else ""
+                        if row_text:
+                            # Usar la primera línea como título
+                            lines = row_text.split('\n')
+                            issue_data["Title"] = lines[0]
+                            
+                            
+                            
+                            
+                            
+    # Filtrar elementos de control de UI
+                    if issue_data.get("Title") and not any(control in issue_data["Title"].lower() 
+                                            for control in ["show more", "show less", "load more"]):
+                        issues_data.append(issue_data)
+                    
+                    # Actualizar progreso periódicamente
+                    if (index + 1) % 20 == 0:
+                        logger.info(f"Procesadas {index + 1} filas de {len(rows)}")
+                    
+                except Exception as e:
+                    logger.debug(f"Error al procesar fila {index}: {e}")
+            
+            logger.info(f"Extracción completada: {len(issues_data)} issues extraídos")
+            return issues_data
+            
+        except Exception as e:
+            logger.error(f"Error en la extracción de datos: {e}")
+            return []
+        
+        
+        
+
+
+
+
+    def _detect_table_headers_enhanced(self):
+        """
+        Detecta y mapea los encabezados de la tabla para mejor extracción
+        con soporte para 18 columnas.
+        
+        Returns:
+            dict: Diccionario que mapea nombres de encabezados a índices de columna
+        """
+        try:
+            # Intentar encontrar la fila de encabezados
+            header_selectors = [
+                "//tr[contains(@class, 'sapMListTblHeader')]",
+                "//div[contains(@class, 'sapMListTblHeaderCell')]/..",
+                "//div[@role='columnheader']/parent::div[@role='row']",
+                "//th[contains(@class, 'sapMListTblHeaderCell')]/.."
+            ]
+            
+            for selector in header_selectors:
+                header_rows = self.driver.find_elements(By.XPATH, selector)
+                if header_rows:
+                    # Tomar la primera fila de encabezados encontrada
+                    header_row = header_rows[0]
+                    
+                    # Extraer las celdas de encabezado
+                    header_cells = header_row.find_elements(By.XPATH, 
+                        ".//th | .//div[@role='columnheader'] | .//div[contains(@class, 'sapMListTblHeaderCell')]")
+                    
+                    if header_cells:
+                        # Mapear nombres de encabezados a índices
+                        header_map = {}
+                        for i, cell in enumerate(header_cells):
+                            header_text = cell.text.strip()
+                            if header_text:
+                                header_map[header_text.upper()] = i
+                        
+                        logger.info(f"Encabezados detectados: {header_map}")
+                        return header_map
+            
+            # Si el método anterior falla, usar JavaScript para extraer encabezados
+            js_script = """
+            (function() {
+                // Buscar encabezados de tabla en diferentes formatos
+                var headerElements = [];
+                
+                // 1. Buscar encabezados tradicionales
+                var headers = document.querySelectorAll('th, div[role="columnheader"]');
+                if (headers.length > 3) {
+                    headerElements = Array.from(headers);
+                }
+                
+                // 2. Buscar en otras estructuras de SAP UI5
+                if (headerElements.length === 0) {
+                    var sapHeaders = document.querySelectorAll('.sapMListTblHeaderCell, .sapUiTableHeaderCell');
+                    if (sapHeaders.length > 3) {
+                        headerElements = Array.from(sapHeaders);
+                    }
+                }
+                
+                // 3. Buscar en la primera fila (a veces contiene encabezados)
+                if (headerElements.length === 0) {
+                    var firstRow = document.querySelector('.sapMListItems > div:first-child, .sapMListTbl > tbody > tr:first-child');
+                    if (firstRow) {
+                        var cells = firstRow.querySelectorAll('td, div[role="gridcell"]');
+                        if (cells.length > 3) {
+                            headerElements = Array.from(cells);
+                        }
+                    }
+                }
+                
+                // Extraer el texto de los encabezados
+                var headerMap = {};
+                for (var i = 0; i < headerElements.length; i++) {
+                    var text = headerElements[i].textContent.trim();
+                    if (text) {
+                        headerMap[text.toUpperCase()] = i;
+                    }
+                }
+                
+                return headerMap;
+            })();
+            """
+            
+            header_map = self.driver.execute_script(js_script)
+            if header_map and len(header_map) >= 4:
+                logger.info(f"Encabezados detectados mediante JavaScript: {header_map}")
+                return header_map
+            
+            logger.warning("No se pudieron detectar encabezados de tabla")
+            
+            # Usar mapeo predeterminado si todo falla
+            return {
+                'TITLE': 0,
+                'TYPE': 1,
+                'PRIORITY': 2,
+                'STATUS': 3,
+                'DEADLINE': 4,
+                'DUE DATE': 5,
+                'CREATED BY': 6,
+                'CREATED ON': 7
+            }
+            
+        except Exception as e:
+            logger.error(f"Error al detectar encabezados: {e}")
+            return {}
