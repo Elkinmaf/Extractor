@@ -114,9 +114,9 @@ class IssuesExtractor:
             result = self.browser.select_all_visible_columns()
             
             if result:
-                logger.info("✅ Columnas configuradas correctamente")
+                logger.info("[OK] Columnas configuradas correctamente")
             else:
-                logger.warning("❌ No se pudo completar la configuración de columnas")
+                logger.warning("[ERROR] No se pudo completar la configuración de columnas")
                 
             return result
         except Exception as e:
@@ -173,6 +173,80 @@ class IssuesExtractor:
             
         return success, new_items, updated_items
         
+
+
+
+
+    def extract_sap_issues(self, erp_number, project_id):
+        """
+        Método principal para la extracción completa de issues de SAP.
+        Reemplaza o complementa tu método actual.
+        
+        Args:
+            erp_number (str): Número ERP para selección del cliente
+            project_id (str): ID del proyecto a consultar
+            
+        Returns:
+            list: Lista de issues extraídos
+            bool: True si la operación fue exitosa
+        """
+        try:
+            logger.info(f"Iniciando extracción de issues para proyecto {project_id}")
+            
+            # 1. Conectar navegador y navegar a la página de SAP
+            self.browser.connect()
+            result = self.browser.navigate_to_sap(erp_number, project_id)
+            if not result:
+                logger.error("No se pudo navegar a la página de SAP")
+                return [], False
+                
+            # 2. Seleccionar cliente y proyecto
+            if not self.browser.select_customer_automatically(erp_number):
+                logger.error(f"No se pudo seleccionar el cliente {erp_number}")
+                return [], False
+                
+            if not self.browser.select_project_automatically(project_id):
+                logger.error(f"No se pudo seleccionar el proyecto {project_id}")
+                return [], False
+                
+            # 3. Realizar búsqueda
+            if not self.browser.click_search_button():
+                logger.error("No se pudo hacer clic en el botón de búsqueda")
+                return [], False
+                
+            # 4. Esperar a que carguen los resultados iniciales
+            if not self.browser.wait_for_search_results(timeout=30):
+                logger.warning("Posible problema al cargar resultados iniciales")
+                # Continuamos de todos modos, ya que algunos resultados podrían estar disponibles
+            
+            # 5. Extraer todos los issues con el nuevo método que maneja scroll automático
+            logger.info("Iniciando extracción completa de issues")
+            all_issues = self.browser.self.extract_sap_issues(erp_number, project_id)
+            
+            # 6. Validar resultados
+            if not all_issues or len(all_issues) == 0:
+                logger.error("No se encontraron issues para extraer")
+                return [], False
+                
+            # 7. Actualizar base de datos con los issues extraídos
+            logger.info(f"Actualizando base de datos con {len(all_issues)} issues")
+            self.db_manager.save_issues(all_issues, project_id)
+            
+            # 8. Actualizar Excel con los datos extraídos (opcional)
+            if self.config.get("update_excel", True):
+                logger.info("Actualizando archivos Excel")
+                self.excel_manager.update_with_issues(all_issues)
+                
+            logger.info(f"Extracción completa finalizada: {len(all_issues)} issues procesados")
+            return all_issues, True
+            
+        except Exception as e:
+            logger.error(f"Error en extract_sap_issues: {e}")
+            return [], False
+        finally:
+            # Cerrar navegador o dejarlo abierto según configuración
+            if self.config.get("close_browser_after_extraction", True):
+                self.browser.close()
 
 
 
@@ -423,7 +497,7 @@ class IssuesExtractor:
             return False    
     
     
-    
+
     
     def navigate_to_issues_tab(self):
         """
@@ -495,31 +569,16 @@ class IssuesExtractor:
     
     
     
-    def perform_extraction(self):
+    
+    
+    def _verify_issues_page(self):
         """
-        Método principal para ejecutar el proceso de extracción.
-        
-        Este método coordina la extracción de datos una vez que la navegación
-        y selección de cliente/proyecto ha sido completada.
+        Verifica si estamos en la página de Issues correcta.
         
         Returns:
-            bool: True si la extracción fue exitosa, False en caso contrario
+            bool: True si estamos en la página de Issues, False en caso contrario
         """
         try:
-            # Marcar como procesando
-            self.processing = True
-            
-            logger.info("Comenzando proceso de extracción...")
-            
-            # Actualizar la interfaz si existe
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Comenzando proceso de extracción...")
-                if self.root:
-                    self.root.update()
-            
-            # Verificación de si estamos en la página correcta
-            in_issues_page = False
-            
             # Estrategia 1: Buscar el texto "Issues (número)"
             try:
                 issues_title_elements = self.driver.find_elements(
@@ -528,96 +587,134 @@ class IssuesExtractor:
                 )
                 if issues_title_elements:
                     logger.info(f"Página de Issues detectada por título: {issues_title_elements[0].text}")
-                    in_issues_page = True
+                    return True
             except Exception as e:
                 logger.debug(f"No se pudo detectar título de Issues: {e}")
             
             # Estrategia 2: Verificar si hay filas de datos visibles
-            if not in_issues_page:
-                issue_rows = self.browser.find_table_rows(highlight=False)
-                if len(issue_rows) > 0:
-                    logger.info(f"Se detectaron {len(issue_rows)} filas de datos que parecen issues")
-                    in_issues_page = True
+            issue_rows = self.browser.find_table_rows(highlight=False)
+            if len(issue_rows) > 0:
+                logger.info(f"Se detectaron {len(issue_rows)} filas de datos que parecen issues")
+                return True
             
             # Estrategia 3: Verificar encabezados de columna típicos
-            if not in_issues_page:
-                try:
-                    column_headers = self.driver.find_elements(
-                        By.XPATH,
-                        "//div[text()='Title'] | //div[text()='Type'] | //div[text()='Priority'] | //div[text()='Status']"
-                    )
-                    if len(column_headers) >= 3:
-                        logger.info(f"Se detectaron encabezados de columna típicos de issues: {len(column_headers)}")
-                        in_issues_page = True
-                except Exception as e:
-                    logger.debug(f"No se pudieron detectar encabezados de columna: {e}")
+            try:
+                column_headers = self.driver.find_elements(
+                    By.XPATH,
+                    "//div[text()='Title'] | //div[text()='Type'] | //div[text()='Priority'] | //div[text()='Status']"
+                )
+                if len(column_headers) >= 3:
+                    logger.info(f"Se detectaron encabezados de columna típicos de issues: {len(column_headers)}")
+                    return True
+            except Exception as e:
+                logger.debug(f"No se pudieron detectar encabezados de columna: {e}")
             
-            # Si aún no estamos seguros, intentar hacer clic en la pestaña Issues
+            # Si no se detecta ninguna de las condiciones anteriores
+            logger.warning("No se detectó la página de Issues")
+            return False
+        
+        except Exception as e:
+            logger.error(f"Error al verificar página de Issues: {e}")
+            return False
+    
+    
+    
+    
+    
+    def perform_extraction(self):
+        """
+        Método principal para ejecutar el proceso de extracción.
+        
+        Este método coordina la extracción de datos una vez que la navegación
+        y selección de cliente/proyecto ha sido completada. Incluye soporte
+        para extraer hasta 18 columnas de datos.
+        
+        Returns:
+            bool: True si la extracción fue exitosa, False en caso contrario
+        """
+        try:
+            # Marcar como procesando
+            self.processing = True
+            
+            logger.info("Comenzando proceso de extracción completa...")
+            
+            # Actualizar la interfaz si existe
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Comenzando proceso de extracción completa...")
+                if self.root:
+                    self.root.update()
+            
+            # Verificar que tenemos un archivo Excel configurado
+            if not self.excel_file_path:
+                logger.warning("No se ha seleccionado archivo Excel para guardar los datos")
+                if hasattr(self, 'root') and self.root:
+                    excel_path = self.choose_excel_file()
+                    if not excel_path:
+                        logger.error("No se seleccionó archivo Excel")
+                        self.processing = False
+                        return False
+            
+            # Obtener el número total de issues para mostrar progreso
+            in_issues_page = self._verify_issues_page()
             if not in_issues_page:
-                logger.warning("No se detectó la página de Issues. Intentando hacer clic en la pestaña...")
-                
+                logger.warning("No se detectó la página de Issues. Intentando navegar...")
                 if not self.navigate_to_issues_tab():
                     logger.warning("No se pudo navegar a la pestaña de Issues")
-                else:
-                    in_issues_page = True
-                    
-                # Esperar a que cargue la página
-                time.sleep(3)
+                time.sleep(3)  # Esperar a que cargue la página
             
-            # ====== NOVEDAD: SELECCIÓN DE TODAS LAS COLUMNAS ======
-            # Seleccionar todas las columnas disponibles para maximizar datos extraídos
-            if hasattr(self.browser, 'select_all_visible_columns'):
-                logger.info("Intentando seleccionar todas las columnas disponibles...")
-                
-                # Actualizar la interfaz si existe
-                if hasattr(self, 'status_var') and self.status_var:
-                    self.status_var.set("Configurando columnas visibles...")
-                    if self.root:
-                        self.root.update()
-                        
-                columns_configured = self.browser.select_all_visible_columns()
-                
-                if columns_configured:
-                    logger.info("✅ Columnas configuradas correctamente para extracción completa")
-                    
-                    # Esperar a que se recargue la tabla con las nuevas columnas
-                    time.sleep(3)
-                else:
-                    logger.warning("⚠️ No se pudieron configurar todas las columnas")
-            else:
-                logger.warning("La función de selección de columnas no está disponible")
+            # Obtener total de issues para cálculo de progreso
+            total_issues = self.browser.get_total_issues_count()
+            logger.info(f"Número total de issues a extraer: {total_issues}")
+            
+            # Actualizar la interfaz
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set(f"Cargando {total_issues} issues mediante scroll...")
+                if self.root:
+                    self.root.update()
+            
+            # Hacer scroll para cargar todos los issues
+            loaded_rows = self.browser.scroll_to_load_all_items(total_issues)
+            logger.info(f"Se cargaron {loaded_rows} filas de un total de {total_issues}")
+            
+            # Verificar si se cargaron suficientes filas
+            if loaded_rows < total_issues * 0.7:  # Si se cargaron menos del 70% de las filas esperadas
+                logger.warning(f"Se cargaron solo {loaded_rows} filas de {total_issues} esperadas")
+                if hasattr(self, 'root') and self.root:
+                    result = messagebox.askokcancel(
+                        "Advertencia",
+                        f"Se han cargado solo {loaded_rows} issues de {total_issues} esperados.\n\n"
+                        "¿Desea continuar con la extracción con los datos actuales?",
+                        icon='warning'
+                    )
+                    if not result:
+                        logger.info("Usuario canceló la extracción debido a carga incompleta")
+                        self.processing = False
+                        return False
+            
+            # Actualizar la interfaz
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Extrayendo datos de todas las columnas visibles...")
+                if self.root:
+                    self.root.update()
             
             # Intentar extracción con reintentos
             max_attempts = 3
+            issues_data = None
+            
             for attempt in range(max_attempts):
                 try:
                     logger.info(f"Intento de extracción {attempt+1}/{max_attempts}")
                     
-                    # Actualizar la interfaz si existe
+                    # Actualizar la interfaz
                     if hasattr(self, 'status_var') and self.status_var:
                         self.status_var.set(f"Intento de extracción {attempt+1}/{max_attempts}...")
                     
-                    issues_data = self.browser.extract_issues_data()
+                    # Usar el método optimizado que obtiene todas las columnas visibles
+                    issues_data = self.browser.extract_issues_data_optimized()
                     
-                    if issues_data:
+                    if issues_data and len(issues_data) > 0:
                         logger.info(f"Extracción exitosa: {len(issues_data)} issues encontrados")
-                        
-                        # Actualizar Excel con los datos extraídos
-                        if self.excel_file_path:
-                            self.update_excel(issues_data)
-                        else:
-                            logger.warning("No se ha seleccionado archivo Excel para guardar los datos")
-                            
-                            if hasattr(self, 'status_var') and self.status_var:
-                                self.status_var.set("Advertencia: No se ha seleccionado archivo Excel")
-                            
-                            if self.root:
-                                excel_path = self.choose_excel_file()
-                                if excel_path:
-                                    self.update_excel(issues_data)
-                        
-                        self.processing = False
-                        return True
+                        break
                     else:
                         logger.warning(f"No se encontraron issues en el intento {attempt+1}")
                         
@@ -625,20 +722,6 @@ class IssuesExtractor:
                         if attempt < max_attempts - 1:
                             logger.info("Esperando antes de reintentar...")
                             time.sleep(5)
-                        else:
-                            logger.error("Todos los intentos de extracción fallaron")
-                            
-                            if hasattr(self, 'status_var') and self.status_var:
-                                self.status_var.set("Error: No se encontraron issues después de varios intentos")
-                            
-                            if self.root:
-                                messagebox.showerror(
-                                    "Error de Extracción", 
-                                    "No se pudieron encontrar issues después de varios intentos. Verifique que está en la página correcta y que existen issues para extraer."
-                                )
-                            
-                            self.processing = False
-                            return False
                 except Exception as e:
                     logger.error(f"Error en el intento {attempt+1}: {e}")
                     
@@ -646,40 +729,70 @@ class IssuesExtractor:
                     if attempt < max_attempts - 1:
                         logger.info("Esperando antes de reintentar...")
                         time.sleep(5)
-                    else:
-                        logger.error(f"Todos los intentos de extracción fallaron: {e}")
-                        
-                        if hasattr(self, 'status_var') and self.status_var:
-                            self.status_var.set(f"Error de extracción: {e}")
-                        
-                        if self.root:
-                            messagebox.showerror(
-                                "Error de Extracción", 
-                                f"Se produjo un error durante la extracción: {e}"
-                            )
-                        
-                        self.processing = False
-                        return False
             
-            # Si llegamos aquí, todos los intentos fallaron
-            logger.error("Extracción fallida después de varios intentos")
+            # Verificar si se obtuvieron datos
+            if not issues_data or len(issues_data) == 0:
+                logger.error("Todos los intentos de extracción fallaron")
+                
+                if hasattr(self, 'status_var') and self.status_var:
+                    self.status_var.set("Error: No se encontraron issues después de varios intentos")
+                
+                if self.root:
+                    messagebox.showerror(
+                        "Error de Extracción", 
+                        "No se pudieron encontrar issues después de varios intentos. Verifique que está en la página correcta y que existen issues para extraer."
+                    )
+                
+                self.processing = False
+                return False
             
+            # Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Error: Extracción fallida")
+                self.status_var.set(f"Guardando {len(issues_data)} issues en Excel...")
+                if self.root:
+                    self.root.update()
+            
+            # Actualizar Excel con los datos extraídos
+            success, new_items, updated_items = self.update_excel(issues_data)
+            
+            # Verificar resultado de la actualización
+            if success:
+                logger.info(f"Excel actualizado: {new_items} nuevos items, {updated_items} actualizados")
+                
+                if hasattr(self, 'status_var') and self.status_var:
+                    self.status_var.set(f"Excel actualizado: {new_items} nuevos, {updated_items} actualizados")
+                
+                if self.root:
+                    messagebox.showinfo(
+                        "Proceso Completado", 
+                        f"El archivo Excel ha sido actualizado correctamente.\n\n"
+                        f"Se han agregado {new_items} nuevos issues y actualizado {updated_items} issues existentes."
+                    )
+            else:
+                logger.error("Error al actualizar Excel")
+                
+                if hasattr(self, 'status_var') and self.status_var:
+                    self.status_var.set("Error al actualizar Excel")
+                
+                if self.root:
+                    messagebox.showerror(
+                        "Error al Actualizar Excel", 
+                        "No se pudo actualizar el archivo Excel.\n\n"
+                        "Verifique que el archivo no esté abierto en otra aplicación."
+                    )
             
             self.processing = False
-            return False
+            return success
             
         except Exception as e:
             logger.error(f"Error general en el proceso de extracción: {e}")
             
-            # Actualizar la interfaz si existe
+            # Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set(f"Error: {e}")
             
             self.processing = False
             return False
-
 
 
 
@@ -1187,6 +1300,38 @@ class IssuesExtractor:
             self.status_var.set(f"Error: {e}")
             messagebox.showerror("Error", f"Error al iniciar el navegador: {e}")
 
+            # NUEVO CÓDIGO: Iniciar extracción de datos automáticamente
+            logger.info("Comenzando extracción de datos a Excel...")
+
+            # Actualizar la interfaz
+            if self.root:
+                self.root.after(0, lambda: self.status_var.set("Iniciando extracción de datos..."))
+
+            # Usar el método perform_extraction existente para extraer los datos
+            try:
+                extraction_success = self.perform_extraction()
+                
+                if extraction_success:
+                    logger.info("✅ Extracción de datos completada con éxito")
+                    if self.root:
+                        self.root.after(0, lambda: self.status_var.set("Extracción completada. Los datos han sido guardados en Excel."))
+                else:
+                    logger.warning("⚠️ La extracción de datos no fue exitosa")
+                    if self.root:
+                        self.root.after(0, lambda: self.status_var.set("Error: La extracción de datos no fue exitosa"))
+                        self.root.after(0, lambda: messagebox.showwarning(
+                            "Extracción incompleta",
+                            "La extracción de datos no se completó correctamente.\n\n"
+                            "Verifique el log para más detalles."
+                        ))
+            except Exception as e:
+                logger.error(f"Error durante la extracción de datos: {e}")
+                if self.root:
+                    self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                    self.root.after(0, lambda: messagebox.showerror(
+                        "Error de Extracción", 
+                        f"Se produjo un error durante la extracción de datos:\n\n{e}"
+                    ))
 
 
 
@@ -1462,13 +1607,9 @@ class IssuesExtractor:
 
 
 
-
     def start_extraction(self):
         """
-        Inicia el proceso de extracción desde la interfaz gráfica
-        
-        Realiza validaciones iniciales y ejecuta la extracción en un hilo
-        separado para no bloquear la interfaz gráfica.
+        Inicia el proceso de extracción de issues con método dinámico mejorado.
         """
         try:
             # Verificar si hay un proceso en curso
@@ -1480,28 +1621,172 @@ class IssuesExtractor:
             if not self.excel_file_path:
                 messagebox.showwarning("Archivo Excel no seleccionado", "Debe seleccionar o crear un archivo Excel primero.")
                 return
-                
+                    
             # Verificar que el navegador está abierto
             if not self.driver:
                 messagebox.showwarning("Navegador no iniciado", "Debe iniciar el navegador primero.")
                 return
-                
-            # Obtener valores de cliente y proyecto
-            erp_number = self.client_var.get()
-            project_id = self.project_var.get()
             
-            # Iniciar extracción en un hilo separado para no bloquear la GUI
-            threading.Thread(
-                target=self._fill_fields_and_extract, 
-                args=(erp_number, project_id),
-                daemon=True
-            ).start()
+            # Marcar como procesando
+            self.processing = True
+            
+            # Actualizar la interfaz
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Iniciando extracción dinámica de issues...")
+                if self.root:
+                    self.root.update()
+            
+            # Ejecutar la extracción en un hilo separado para no bloquear la GUI
+            def extraction_thread():
+                try:
+                    # Usar el método de extracción sin argumentos
+                    extracted_issues = self.browser.extract_all_issues()
+                    
+                    # Verificar si se extrajeron issues
+                    if not extracted_issues or len(extracted_issues) == 0:
+                        logger.warning("No se encontraron issues para extraer")
+                        if self.root:
+                            self.root.after(0, lambda: messagebox.showwarning(
+                                "Extracción Incompleta", 
+                                "No se encontraron issues para extraer. Verifique la página y los filtros."
+                            ))
+                        self.processing = False
+                        return
+                    
+                    # Actualizar la interfaz para mostrar progreso
+                    if self.root:
+                        self.root.after(0, lambda: self.status_var.set(f"Extrayendo {len(extracted_issues)} issues..."))
+                    
+                    # Guardar en Excel
+                    success, new_items, updated_items = self.update_excel(extracted_issues)
+                    
+                    # Mostrar resultado en el hilo principal
+                    if self.root:
+                        if success:
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "Extracción Completada", 
+                                f"Se han extraído {len(extracted_issues)} issues.\n"
+                                f"Nuevos: {new_items}, Actualizados: {updated_items}"
+                            ))
+                        else:
+                            self.root.after(0, lambda: messagebox.showerror(
+                                "Error de Extracción", 
+                                "No se pudo actualizar el archivo Excel. Verifique que no esté abierto en otra aplicación."
+                            ))
+                    
+                except Exception as e:
+                    logger.error(f"Error en extracción dinámica: {e}")
+                    if self.root:
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "Error Crítico", 
+                            f"Ocurrió un error durante la extracción:\n{e}"
+                        ))
+                finally:
+                    # Restablecer estado de procesamiento
+                    self.processing = False
+                    if hasattr(self, 'status_var') and self.status_var and self.root:
+                        self.root.after(0, lambda: self.status_var.set("Extracción finalizada"))
+            
+            # Iniciar el hilo de extracción
+            threading.Thread(target=extraction_thread, daemon=True).start()
             
         except Exception as e:
             logger.error(f"Error al iniciar extracción: {e}")
-            self.status_var.set(f"Error: {e}")
-            messagebox.showerror("Error", f"Error al iniciar extracción: {e}")
+            if self.root:
+                messagebox.showerror("Error", f"Error al iniciar extracción: {e}")
+            self.processing = False        
+        
+        
+        
+        
+        
+        
+        
+    def _try_vba_extraction(self, url, target_file):
+        """
+        Intenta realizar la extracción utilizando el método VBA automatizado.
+        
+        Args:
+            url (str): URL de la página SAP de la que extraer datos
+            target_file (str): Ruta del archivo Excel destino
+            
+        Returns:
+            bool: True si la extracción fue exitosa, False si falló
+        """
+        try:
+            # Mostrar mensaje de progreso
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Ejecutando extracción optimizada...")
+                if self.root:
+                    self.root.update()
+                    
+            # Intentar importar e inicializar el extractor VBA mejorado
+            try:
+                from tools.enhanced_vba_extractor import EnhancedVBAExtractor
+                vba_extractor = EnhancedVBAExtractor(self.driver)
+            except ImportError:
+                logger.warning("No se pudo importar EnhancedVBAExtractor, probablemente xlwings no está disponible")
+                return False
+            
+            # Ejecutar la extracción VBA
+            success, result, message = vba_extractor.extract_data(url, target_file)
+            
+            if success:
+                # Extraer información de filas extraídas
+                rows_extracted = result.get('rows_extracted', 0) if result else 0
+                file_path = result.get('destination_file', target_file) if result else target_file
+                
+                # Actualizar la interfaz con el resultado exitoso
+                if hasattr(self, 'root') and self.root:
+                    self.root.after(0, lambda: self.status_var.set(
+                        f"Extracción completada. Se extrajeron {rows_extracted} issues."
+                    ))
+                    
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        "Extracción Exitosa", 
+                        f"La extracción se ha completado correctamente.\n\n"
+                        f"Se extrajeron {rows_extracted} issues.\n"
+                        f"Los datos han sido guardados en: {file_path}"
+                    ))
+                    
+                return True
+            else:
+                # Registrar el error pero no mostrar mensaje (el método alternativo se encargará)
+                logger.warning(f"Extracción VBA falló: {message}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error en extracción VBA: {e}")
+            return False
 
+
+
+
+
+
+    def _original_extraction(self):
+        """
+        Método que conserva la lógica original de extracción
+        para poder volver a ella si es necesario.
+        """
+        # Inicio del método original
+        erp_number = self.client_var.get()
+        project_id = self.project_var.get()
+        
+        # Iniciar extracción en un hilo separado para no bloquear la GUI
+        threading.Thread(
+            target=self._fill_fields_and_extract, 
+            args=(erp_number, project_id),
+            daemon=True
+        ).start()
+
+
+
+
+
+
+
+    
     def setup_gui_logger(self):
         """
         Configura el logger para que también escriba en la GUI
