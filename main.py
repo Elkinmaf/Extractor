@@ -22,11 +22,27 @@ from datetime import datetime
 from tools.vba_extractor import VBAExtractor
 
 
+from extractor.issues_extractor import IssuesExtractor, run_console_mode
+
+
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import logging
+import re
+import threading
+
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    StaleElementReferenceException,
+    ElementClickInterceptedException,
+    JavascriptException,
+    WebDriverException
+)
 
 # Configurar logging básico inicial
 log_dir = "logs"
@@ -122,13 +138,16 @@ def create_shortcut(target_path, shortcut_path=None, icon_path=None):
         logger.error(f"Error al crear acceso directo: {e}")
         return None
 
+
+
+
+
+
+
+
+
+
 def main():
-    """
-    Función principal que ejecuta la aplicación
-    
-    Controla el flujo principal del programa, maneja excepciones globales,
-    y decide entre modo GUI o consola.
-    """
     # Asegurar que estamos en el directorio raíz del proyecto
     if not ensure_project_root():
         sys.exit(1)
@@ -152,16 +171,6 @@ def main():
     except ImportError:
         print("Nota: La biblioteca Pillow no está disponible. Algunas características visuales estarán limitadas.")
         print("Si deseas instalarla, ejecuta: pip install Pillow")
-    
-    # Importar la clase principal
-    try:
-        from extractor.issues_extractor import IssuesExtractor, run_console_mode
-    except ImportError as e:
-        logger.critical(f"Error al importar módulos: {e}")
-        print(f"Error crítico: {e}")
-        print("Asegúrate de estar ejecutando el script desde el directorio raíz del proyecto.")
-        input("\nPresiona ENTER para salir...")
-        sys.exit(1)
     
     try:
         # Determinar modo de ejecución
@@ -188,6 +197,10 @@ def main():
         # En modo consola, mantener la ventana abierta para ver el error
         if len(sys.argv) > 1 and sys.argv[1] == "--console":
             input("\nPresiona ENTER para cerrar...")
-
+            
+            
+            
+            
+            
 if __name__ == "__main__":
     main()
