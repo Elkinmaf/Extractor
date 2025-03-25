@@ -228,9 +228,9 @@ class IssuesExtractor:
                 logger.warning("Posible problema al cargar resultados iniciales")
                 # Continuamos de todos modos, ya que algunos resultados podrían estar disponibles
             
-            # 5. Extraer todos los issues con el método mejorado de extracción
-            logger.info("Iniciando extracción completa de issues")
-            all_issues = self.browser.extract_all_issues()  # Usar el método mejorado
+            # 5. Extraer todos los issues con el método mejorado de extracción robusta
+            logger.info("Iniciando extracción completa de issues con método robusto")
+            all_issues = self.browser.extract_all_issues_robust()  # Usar el método robusto
             
             # 6. Validar resultados
             if not all_issues or len(all_issues) == 0:
@@ -256,12 +256,13 @@ class IssuesExtractor:
             if hasattr(self, 'config') and self.config.get("close_browser_after_extraction", True):
                 self.browser.close()
 
+
     def run_extraction(self):
         """
-        Ejecuta el proceso completo de extracción
+        Ejecuta el proceso completo de extracción para modo GUI y consola.
         
-        Este método coordina todo el flujo de extracción, desde la conexión
-        con el navegador hasta la obtención de los datos.
+        Este método se ha actualizado para usar las mejoras en la extracción
+        y proporciona un flujo más robusto para el usuario.
         
         Returns:
             bool: True si la extracción fue exitosa, False en caso contrario
@@ -352,12 +353,14 @@ class IssuesExtractor:
                             if not result:
                                 return False
                             client_selected = True  # El usuario confirmó que seleccionó manualmente
-                            time.sleep(1)  # Dar tiempo para que se procese la selección. Modificado de 3 a 1
-                            
-                            
-                            
-                            
-# Actualizar la interfaz
+                            time.sleep(1)  # Dar tiempo para que se procese la selección
+                        else:
+                            # En modo consola
+                            print("\n⚠️ No se pudo seleccionar el cliente automáticamente.")
+                            input("➡️ Por favor, seleccione manualmente el cliente y presione Enter para continuar...")
+                            client_selected = True
+
+            # Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Seleccionando proyecto automáticamente...")
             
@@ -391,6 +394,11 @@ class IssuesExtractor:
                     if not result:
                         return False
                     project_selected = True
+                else:
+                    # En modo consola
+                    print("\n⚠️ No se pudo seleccionar el proyecto automáticamente.")
+                    input("➡️ Por favor, seleccione manualmente el proyecto y presione Enter para continuar...")
+                    project_selected = True
             
             # Hacer clic en el botón de búsqueda
             if hasattr(self, 'status_var') and self.status_var:
@@ -407,6 +415,10 @@ class IssuesExtractor:
                     result = messagebox.askokcancel("Confirmación", "¿Ha hecho clic en el botón de búsqueda?")
                     if not result:
                         return False
+                else:
+                    # En modo consola
+                    print("\n⚠️ No se pudo hacer clic en el botón de búsqueda automáticamente.")
+                    input("➡️ Por favor, haga clic manualmente en el botón de búsqueda y presione Enter para continuar...")
             
             # Esperar a que se carguen los resultados de la búsqueda
             if hasattr(self, 'status_var') and self.status_var:
@@ -418,20 +430,6 @@ class IssuesExtractor:
                 # Dar tiempo adicional y continuar de todos modos
                 time.sleep(5)
             
-            # Continuar con la detección y extracción de issues
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Navegando a la pestaña Issues...")
-            
-            # Navegar a la pestaña Issues
-            if not self.navigate_to_issues_tab():
-                logger.warning("No se pudo navegar automáticamente a la pestaña Issues")
-                if hasattr(self, 'root') and self.root:
-                    messagebox.showwarning("Navegación Manual Requerida", 
-                        "Por favor, navegue manualmente a la pestaña 'Issues' y luego haga clic en Continuar.")
-                    result = messagebox.askokcancel("Confirmación", "¿Ha navegado a la pestaña Issues?")
-                    if not result:
-                        return False
-            
             # MÉTODO AUTOMATIZADO DE NAVEGACIÓN POR TECLADO
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Iniciando navegación por teclado...")
@@ -442,7 +440,7 @@ class IssuesExtractor:
                 logger.info("✅ Navegación post-selección completada con éxito")
                 
                 # Esperar a que se recargue la tabla con las nuevas columnas
-                time.sleep(1) #Modificado de 3 a 1
+                time.sleep(1)
             else:
                 logger.warning("❌ La navegación automática por teclado falló")
                 
@@ -476,8 +474,23 @@ class IssuesExtractor:
                             if hasattr(self, 'status_var') and self.status_var:
                                 self.status_var.set("Proceso cancelado por el usuario")
                             return False
+                    else:
+                        # En modo consola
+                        print("\n⚠️ La navegación automática ha fallado.")
+                        print("Por favor, realice estos pasos manualmente:")
+                        print("1. Haga clic en el título 'Issues and Actions Overview'")
+                        print("2. Pulse Tab 18 veces")
+                        print("3. Pulse Enter (para ajustes)")
+                        print("4. Pulse Tab 3 veces")
+                        print("5. Pulse flecha derecha 2 veces")
+                        print("6. Pulse Enter (para columnas)")
+                        print("7. Pulse Tab 3 veces")
+                        print("8. Pulse Enter (para Select All)")
+                        print("9. Pulse Tab 2 veces")
+                        print("10. Pulse Enter (para OK)")
+                        input("➡️ Después de completar los pasos, presione Enter para continuar...")
             
-            # Realizar la extracción
+            # Realizar la extracción con el método mejorado
             return self.perform_extraction()
                 
         except Exception as e:
@@ -487,8 +500,7 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set(f"Error: {e}")
                 
-            return False
-        
+            return False        
         
         
         
@@ -615,15 +627,12 @@ class IssuesExtractor:
         
         
         
-        
-        
     def perform_extraction(self):
         """
         Método principal para ejecutar el proceso de extracción.
         
-        Este método coordina la extracción de datos una vez que la navegación
-        y selección de cliente/proyecto ha sido completada. Incluye soporte
-        para extraer hasta 18 columnas de datos.
+        Utiliza el método mejorado extract_all_issues_robust para obtener
+        datos de forma más confiable y completa.
         
         Returns:
             bool: True si la extracción fue exitosa, False en caso contrario
@@ -632,11 +641,11 @@ class IssuesExtractor:
             # Marcar como procesando
             self.processing = True
             
-            logger.info("Comenzando proceso de extracción completa...")
+            logger.info("MÉTODO: perform_extraction - Comenzando proceso de extracción mejorado")
             
             # Actualizar la interfaz si existe
             if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Comenzando proceso de extracción completa...")
+                self.status_var.set("Comenzando extracción de datos...")
                 if self.root:
                     self.root.update()
             
@@ -650,68 +659,17 @@ class IssuesExtractor:
                         self.processing = False
                         return False
             
-            # Obtener el número total de issues para mostrar progreso
-            in_issues_page = self._verify_issues_page()
-            if not in_issues_page:
-                logger.warning("No se detectó la página de Issues. Intentando navegar...")
-                if not self.navigate_to_issues_tab():
-                    logger.warning("No se pudo navegar a la pestaña de Issues")
-                time.sleep(3)  # Esperar a que cargue la página
-            
-            # Obtener total de issues para cálculo de progreso
-            total_issues = self.browser.get_total_issues_count()
-            logger.info(f"Número total de issues a extraer: {total_issues}")
+            # Usar el método robusto mejorado para extraer datos
+            logger.info("Iniciando extracción robusta de issues...")
             
             # Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set(f"Cargando {total_issues} issues mediante scroll silencioso...")
+                self.status_var.set("Extrayendo datos con método mejorado...")
                 if self.root:
                     self.root.update()
             
-            # Verificar si podemos usar la navegación por teclado para configurar columnas
-            # Si el botón de ajustes no es visible o no se puede hacer clic
-            if hasattr(self.browser, 'navigate_by_keyboard') and not hasattr(self, '_columns_configured'):
-                logger.info("Intentando configurar columnas con navegación por teclado...")
-                if self.browser.navigate_by_keyboard():
-                    logger.info("✅ Columnas configuradas correctamente mediante navegación por teclado")
-                    self._columns_configured = True
-                else:
-                    logger.warning("❌ No se pudieron configurar columnas con navegación por teclado")
-                    # No fallamos aquí, continuamos con la extracción de todas formas
-            
-            # *** PUNTO CLAVE: Usar el método mejorado de scroll para cargar todas las filas ***
-            loaded_rows = self.browser.scroll_to_load_all_items(total_issues)
-            logger.info(f"Se cargaron {loaded_rows} filas de un total de {total_issues}")
-            
-            # Verificar si se cargaron suficientes filas
-            if loaded_rows < total_issues * 0.7:  # Si se cargaron menos del 70% de las filas esperadas
-                logger.warning(f"Se cargaron solo {loaded_rows} filas de {total_issues} esperadas")
-                if hasattr(self, 'root') and self.root:
-                    result = messagebox.askokcancel(
-                        "Advertencia",
-                        f"Se han cargado solo {loaded_rows} issues de {total_issues} esperados.\n\n"
-                        "¿Desea continuar con la extracción con los datos actuales?",
-                        icon='warning'
-                    )
-                    if not result:
-                        logger.info("Usuario canceló la extracción debido a carga incompleta")
-                        self.processing = False
-                        return False
-            
-            # Actualizar la interfaz
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Extrayendo datos de todas las columnas visibles...")
-                if self.root:
-                    self.root.update()
-            
-            # *** PUNTO CLAVE: Usar el método mejorado de extracción para obtener todos los issues ***
-            # Si tienes extract_issues_data, es preferible usarlo en lugar de extract_all_issues
-            if hasattr(self.browser, 'extract_issues_data'):
-                logger.info("Utilizando método extract_issues_data para obtener los datos")
-                issues_data = self.browser.extract_issues_data()
-            else:
-                logger.info("Utilizando método extract_all_issues para obtener los datos")
-                issues_data = self.browser.extract_all_issues()
+            # Llamar al método de extracción robusto
+            issues_data = self.browser.extract_all_issues_robust()
             
             # Verificar si se obtuvieron datos
             if not issues_data or len(issues_data) == 0:
@@ -779,12 +737,10 @@ class IssuesExtractor:
 
 
 
-
-
-
     def start_extraction(self):
         """
-        Inicia el proceso de extracción de issues con método dinámico mejorado.
+        Inicia el proceso de extracción de issues con método mejorado.
+        Prepara la interfaz y ejecuta la extracción en un hilo separado.
         """
         try:
             # Verificar si hay un proceso en curso
@@ -815,47 +771,21 @@ class IssuesExtractor:
             def extraction_thread():
                 try:
                     # Usar el método de extracción mejorado
-                    extracted_issues = self.browser.extract_all_issues()
+                    success = self.perform_extraction()
                     
-                    # Verificar si se extrajeron issues
-                    if not extracted_issues or len(extracted_issues) == 0:
-                        logger.warning("No se encontraron issues para extraer")
-                        if self.root:
-                            self.root.after(0, lambda: messagebox.showwarning(
-                                "Extracción Incompleta", 
-                                "No se encontraron issues para extraer. Verifique la página y los filtros."
-                            ))
-                        self.processing = False
-                        return
-                    
-                    # Actualizar la interfaz para mostrar progreso
-                    if self.root:
-                        self.root.after(0, lambda: self.status_var.set(f"Extrayendo {len(extracted_issues)} issues..."))
-                    
-                    # Guardar en Excel
-                    success, new_items, updated_items = self.update_excel(extracted_issues)
-                    
-                    # Mostrar resultado en el hilo principal
-                    if self.root:
-                        if success:
-                            self.root.after(0, lambda: messagebox.showinfo(
-                                "Extracción Completada", 
-                                f"Se han extraído {len(extracted_issues)} issues.\n"
-                                f"Nuevos: {new_items}, Actualizados: {updated_items}"
-                            ))
-                        else:
-                            self.root.after(0, lambda: messagebox.showerror(
-                                "Error de Extracción", 
-                                "No se pudo actualizar el archivo Excel. Verifique que no esté abierto en otra aplicación."
-                            ))
+                    if not success:
+                        logger.warning("La extracción no fue exitosa")
+                        if hasattr(self, 'status_var') and self.status_var and self.root:
+                            self.root.after(0, lambda: self.status_var.set("Extracción no completada"))
                     
                 except Exception as e:
-                    logger.error(f"Error en extracción: {e}")
+                    logger.error(f"Error en el hilo de extracción: {e}")
+                    if hasattr(self, 'status_var') and self.status_var and self.root:
+                        self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
+                        
+                    # Mostrar mensaje de error en el hilo principal
                     if self.root:
-                        self.root.after(0, lambda: messagebox.showerror(
-                            "Error Crítico", 
-                            f"Ocurrió un error durante la extracción:\n{e}"
-                        ))
+                        self.root.after(0, lambda: messagebox.showerror("Error", f"Error durante la extracción: {e}"))
                 finally:
                     # Restablecer estado de procesamiento
                     self.processing = False
@@ -870,6 +800,12 @@ class IssuesExtractor:
             if self.root:
                 messagebox.showerror("Error", f"Error al iniciar extracción: {e}")
             self.processing = False
+
+
+
+
+
+    
     
     def setup_gui_logger(self):
         """
