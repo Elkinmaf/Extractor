@@ -82,12 +82,20 @@ class IssuesExtractor:
         self.excel_manager = ExcelManager()
         self.browser = SAPBrowser()
         
+        # Configurar referencias cruzadas para que el navegador pueda acceder a UI
+        self.setup_browser_ui_references()
+    
+    def setup_browser_ui_references(self):
+        """
+        Configura las referencias a la interfaz de usuario en el navegador.
+        Esto permite que el navegador actualice directamente la interfaz.
+        """
+        # Asignar referencias a la UI si existen
+        self.browser.root = self.root
+        self.browser.status_var = self.status_var
         
-        
-        
-        
-        
-        
+        # Agregar logger a ambos componentes para registrar eventos
+        logger.debug("Referencias cruzadas de UI configuradas en el navegador")
     
     def configure_columns_after_settings(self):
         """
@@ -122,26 +130,29 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al configurar columnas: {e}")
             return False
+            
     def choose_excel_file(self):
-            """Permite al usuario elegir un archivo Excel existente o crear uno nuevo"""
-            file_path = self.excel_manager.select_file()
-            self.excel_file_path = file_path
-            self.excel_manager.file_path = file_path
+        """Permite al usuario elegir un archivo Excel existente o crear uno nuevo"""
+        file_path = self.excel_manager.select_file()
+        self.excel_file_path = file_path
+        self.excel_manager.file_path = file_path
+        
+        # Actualizar la interfaz si existe
+        if hasattr(self, 'status_var') and self.status_var:
+            self.status_var.set(f"Archivo Excel seleccionado: {os.path.basename(file_path)}")
+        
+        # Actualizar el nombre del archivo en la etiqueta
+        if hasattr(self, 'excel_filename_var') and self.excel_filename_var:
+            self.excel_filename_var.set(f"Archivo: {os.path.basename(file_path)}")
             
-            # Actualizar la interfaz si existe
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set(f"Archivo Excel seleccionado: {os.path.basename(file_path)}")
-            
-            # Actualizar el nombre del archivo en la etiqueta
-            if hasattr(self, 'excel_filename_var') and self.excel_filename_var:
-                self.excel_filename_var.set(f"Archivo: {os.path.basename(file_path)}")
-                
-            return file_path
+        return file_path
         
     def connect_to_browser(self):
         """Conecta con el navegador y devuelve el éxito de la conexión"""
         result = self.browser.connect()
         self.driver = self.browser.driver
+        # Actualizar referencias UI después de tener el driver
+        self.setup_browser_ui_references()
         return result
         
     def update_excel(self, issues_data):
@@ -172,15 +183,13 @@ class IssuesExtractor:
             )
             
         return success, new_items, updated_items
-        
-
-
-
-
+    
+    
+    
+    
     def extract_sap_issues(self, erp_number, project_id):
         """
         Método principal para la extracción completa de issues de SAP.
-        Reemplaza o complementa tu método actual.
         
         Args:
             erp_number (str): Número ERP para selección del cliente
@@ -219,9 +228,9 @@ class IssuesExtractor:
                 logger.warning("Posible problema al cargar resultados iniciales")
                 # Continuamos de todos modos, ya que algunos resultados podrían estar disponibles
             
-            # 5. Extraer todos los issues con el nuevo método que maneja scroll automático
+            # 5. Extraer todos los issues con el método mejorado de extracción
             logger.info("Iniciando extracción completa de issues")
-            all_issues = self.browser.self.extract_sap_issues(erp_number, project_id)
+            all_issues = self.browser.extract_all_issues()  # Usar el método mejorado
             
             # 6. Validar resultados
             if not all_issues or len(all_issues) == 0:
@@ -232,10 +241,9 @@ class IssuesExtractor:
             logger.info(f"Actualizando base de datos con {len(all_issues)} issues")
             self.db_manager.save_issues(all_issues, project_id)
             
-            # 8. Actualizar Excel con los datos extraídos (opcional)
-            if self.config.get("update_excel", True):
-                logger.info("Actualizando archivos Excel")
-                self.excel_manager.update_with_issues(all_issues)
+            # 8. Actualizar Excel con los datos extraídos
+            logger.info("Actualizando archivos Excel")
+            self.update_excel(all_issues)
                 
             logger.info(f"Extracción completa finalizada: {len(all_issues)} issues procesados")
             return all_issues, True
@@ -244,12 +252,9 @@ class IssuesExtractor:
             logger.error(f"Error en extract_sap_issues: {e}")
             return [], False
         finally:
-            # Cerrar navegador o dejarlo abierto según configuración
-            if self.config.get("close_browser_after_extraction", True):
+            # Cerramos el navegador solo si está configurado para ello
+            if hasattr(self, 'config') and self.config.get("close_browser_after_extraction", True):
                 self.browser.close()
-
-
-
 
     def run_extraction(self):
         """
@@ -293,21 +298,6 @@ class IssuesExtractor:
                 return False
                                 
             logger.info(f"Iniciando extracción para cliente: {erp_number}, proyecto: {project_id}")
-
-            # Validar que tenemos valores no vacíos
-            if not erp_number:
-                logger.warning("ERP number está vacío")
-                if hasattr(self, 'root') and self.root:
-                    messagebox.showwarning("Datos incompletos", "Debe especificar un número ERP de cliente")
-                return False
-                
-            if not project_id:
-                logger.warning("Project ID está vacío")
-                if hasattr(self, 'root') and self.root:
-                    messagebox.showwarning("Datos incompletos", "Debe especificar un ID de proyecto")
-                return False
-                            
-            logger.info(f"Iniciando extracción para cliente: {erp_number}, proyecto: {project_id}")
         
             # Navegar a la URL inicial especificada
             logger.info("Navegando a la URL de SAP con parámetros específicos...")
@@ -345,8 +335,8 @@ class IssuesExtractor:
                     client_selected = True
                 else:
                     # Método 3: Usar JavaScript UI5 si los métodos anteriores fallan
-                    if hasattr(self.browser, '_use_ui5_javascript'):
-                        if self.browser._use_ui5_javascript(erp_number):
+                    if hasattr(self.browser, 'select_customer_ui5_direct'):
+                        if self.browser.select_customer_ui5_direct(erp_number):
                             logger.info("Cliente seleccionado con JavaScript UI5")
                             client_selected = True
                     
@@ -362,9 +352,12 @@ class IssuesExtractor:
                             if not result:
                                 return False
                             client_selected = True  # El usuario confirmó que seleccionó manualmente
-                            time.sleep(3)  # Dar tiempo para que se procese la selección
-            
-            # Actualizar la interfaz
+                            time.sleep(1)  # Dar tiempo para que se procese la selección. Modificado de 3 a 1
+                            
+                            
+                            
+                            
+# Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Seleccionando proyecto automáticamente...")
             
@@ -403,7 +396,7 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Realizando búsqueda...")
                 
-            # Hacer clic en búsqueda utilizando el nuevo método
+            # Hacer clic en búsqueda utilizando el método mejorado
             if not self.browser.click_search_button():
                 logger.warning("Error al hacer clic en el botón de búsqueda automáticamente")
                 # Solicitar acción manual
@@ -419,7 +412,7 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set("Esperando resultados de búsqueda...")
                 
-            # Esperar resultados utilizando el nuevo método
+            # Esperar resultados utilizando el método mejorado
             if not self.browser.wait_for_search_results():
                 logger.warning("No se pudo confirmar la carga de resultados")
                 # Dar tiempo adicional y continuar de todos modos
@@ -449,7 +442,7 @@ class IssuesExtractor:
                 logger.info("✅ Navegación post-selección completada con éxito")
                 
                 # Esperar a que se recargue la tabla con las nuevas columnas
-                time.sleep(3)
+                time.sleep(1) #Modificado de 3 a 1
             else:
                 logger.warning("❌ La navegación automática por teclado falló")
                 
@@ -494,11 +487,16 @@ class IssuesExtractor:
             if hasattr(self, 'status_var') and self.status_var:
                 self.status_var.set(f"Error: {e}")
                 
-            return False    
-    
-    
-
-    
+            return False
+        
+        
+        
+        
+        
+        
+        
+        
+        
     def navigate_to_issues_tab(self):
         """
         Navega a la pestaña 'Issues' una vez seleccionado el proyecto.
@@ -551,7 +549,7 @@ class IssuesExtractor:
                     third_tab = tabs[2]  # Índice 2 para el tercer elemento
                     self.driver.execute_script("arguments[0].click();", third_tab)
                     logger.info("Clic en tercera pestaña realizado")
-                    time.sleep(3)
+                    time.sleep(1) #Modificado de 3 a 1
                     return True
             except:
                 pass
@@ -562,15 +560,7 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al navegar a la pestaña Issues: {e}")
             return False
-    
-    
-    
-    
-    
-    
-    
-    
-    
+            
     def _verify_issues_page(self):
         """
         Verifica si estamos en la página de Issues correcta.
@@ -592,6 +582,7 @@ class IssuesExtractor:
                 logger.debug(f"No se pudo detectar título de Issues: {e}")
             
             # Estrategia 2: Verificar si hay filas de datos visibles
+            # Usar el método de browser para encontrar filas
             issue_rows = self.browser.find_table_rows(highlight=False)
             if len(issue_rows) > 0:
                 logger.info(f"Se detectaron {len(issue_rows)} filas de datos que parecen issues")
@@ -616,11 +607,16 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al verificar página de Issues: {e}")
             return False
-    
-    
-    
-    
-    
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
     def perform_extraction(self):
         """
         Método principal para ejecutar el proceso de extracción.
@@ -668,11 +664,22 @@ class IssuesExtractor:
             
             # Actualizar la interfaz
             if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set(f"Cargando {total_issues} issues mediante scroll...")
+                self.status_var.set(f"Cargando {total_issues} issues mediante scroll silencioso...")
                 if self.root:
                     self.root.update()
             
-            # Hacer scroll para cargar todos los issues
+            # Verificar si podemos usar la navegación por teclado para configurar columnas
+            # Si el botón de ajustes no es visible o no se puede hacer clic
+            if hasattr(self.browser, 'navigate_by_keyboard') and not hasattr(self, '_columns_configured'):
+                logger.info("Intentando configurar columnas con navegación por teclado...")
+                if self.browser.navigate_by_keyboard():
+                    logger.info("✅ Columnas configuradas correctamente mediante navegación por teclado")
+                    self._columns_configured = True
+                else:
+                    logger.warning("❌ No se pudieron configurar columnas con navegación por teclado")
+                    # No fallamos aquí, continuamos con la extracción de todas formas
+            
+            # *** PUNTO CLAVE: Usar el método mejorado de scroll para cargar todas las filas ***
             loaded_rows = self.browser.scroll_to_load_all_items(total_issues)
             logger.info(f"Se cargaron {loaded_rows} filas de un total de {total_issues}")
             
@@ -697,50 +704,26 @@ class IssuesExtractor:
                 if self.root:
                     self.root.update()
             
-            # Intentar extracción con reintentos
-            max_attempts = 3
-            issues_data = None
-            
-            for attempt in range(max_attempts):
-                try:
-                    logger.info(f"Intento de extracción {attempt+1}/{max_attempts}")
-                    
-                    # Actualizar la interfaz
-                    if hasattr(self, 'status_var') and self.status_var:
-                        self.status_var.set(f"Intento de extracción {attempt+1}/{max_attempts}...")
-                    
-                    # Usar el método optimizado que obtiene todas las columnas visibles
-                    issues_data = self.browser.extract_issues_data_optimized()
-                    
-                    if issues_data and len(issues_data) > 0:
-                        logger.info(f"Extracción exitosa: {len(issues_data)} issues encontrados")
-                        break
-                    else:
-                        logger.warning(f"No se encontraron issues en el intento {attempt+1}")
-                        
-                        # Si no es el último intento, esperar y reintentar
-                        if attempt < max_attempts - 1:
-                            logger.info("Esperando antes de reintentar...")
-                            time.sleep(5)
-                except Exception as e:
-                    logger.error(f"Error en el intento {attempt+1}: {e}")
-                    
-                    # Si no es el último intento, esperar y reintentar
-                    if attempt < max_attempts - 1:
-                        logger.info("Esperando antes de reintentar...")
-                        time.sleep(5)
+            # *** PUNTO CLAVE: Usar el método mejorado de extracción para obtener todos los issues ***
+            # Si tienes extract_issues_data, es preferible usarlo en lugar de extract_all_issues
+            if hasattr(self.browser, 'extract_issues_data'):
+                logger.info("Utilizando método extract_issues_data para obtener los datos")
+                issues_data = self.browser.extract_issues_data()
+            else:
+                logger.info("Utilizando método extract_all_issues para obtener los datos")
+                issues_data = self.browser.extract_all_issues()
             
             # Verificar si se obtuvieron datos
             if not issues_data or len(issues_data) == 0:
-                logger.error("Todos los intentos de extracción fallaron")
+                logger.error("No se encontraron issues para extraer")
                 
                 if hasattr(self, 'status_var') and self.status_var:
-                    self.status_var.set("Error: No se encontraron issues después de varios intentos")
+                    self.status_var.set("Error: No se encontraron issues para extraer")
                 
                 if self.root:
                     messagebox.showerror(
                         "Error de Extracción", 
-                        "No se pudieron encontrar issues después de varios intentos. Verifique que está en la página correcta y que existen issues para extraer."
+                        "No se pudieron encontrar issues para extraer. Verifique que está en la página correcta."
                     )
                 
                 self.processing = False
@@ -799,240 +782,201 @@ class IssuesExtractor:
 
 
 
-    def _fill_fields_and_extract(self, erp_number, project_id):
+    def start_extraction(self):
         """
-        Rellena los campos y luego ejecuta la extracción
-        
-        Este método se ejecuta en un hilo separado para no bloquear la interfaz
-        gráfica durante el proceso de extracción.
-        
-        Args:
-            erp_number (str): Número ERP del cliente
-            project_id (str): ID del proyecto
-            
-        Returns:
-            bool: True si la extracción fue exitosa, False en caso contrario
+        Inicia el proceso de extracción de issues con método dinámico mejorado.
         """
         try:
+            # Verificar si hay un proceso en curso
+            if self.processing:
+                messagebox.showwarning("Proceso en curso", "Hay un proceso de extracción en curso.")
+                return
+                
+            # Verificar que existe un archivo Excel seleccionado
+            if not self.excel_file_path:
+                messagebox.showwarning("Archivo Excel no seleccionado", "Debe seleccionar o crear un archivo Excel primero.")
+                return
+                    
+            # Verificar que el navegador está abierto
+            if not self.driver:
+                messagebox.showwarning("Navegador no iniciado", "Debe iniciar el navegador primero.")
+                return
+            
+            # Marcar como procesando
+            self.processing = True
+            
             # Actualizar la interfaz
-            if hasattr(self, 'status_var'):
-                self.status_var.set("Seleccionando cliente...")
+            if hasattr(self, 'status_var') and self.status_var:
+                self.status_var.set("Iniciando extracción de issues...")
                 if self.root:
                     self.root.update()
             
-            # 1. Seleccionar cliente
-            client_selected = False
-            if not self.browser.select_customer_automatically(erp_number):
+            # Ejecutar la extracción en un hilo separado para no bloquear la GUI
+            def extraction_thread():
                 try:
-                    customer_field = self.driver.find_element(By.XPATH, "//input[contains(@placeholder, 'Customer')]")
-                    if customer_field:
-                        customer_field.clear()
-                        customer_field.send_keys(erp_number)
-                        time.sleep(1)
-                        
-                        # Intento directo con teclas DOWN y ENTER
-                        customer_field.send_keys(Keys.DOWN)
-                        time.sleep(0.5)
-                        customer_field.send_keys(Keys.ENTER)
-                        time.sleep(1)
-                        
-                        # Verificar si funcionó
-                        if self.browser._verify_client_selection_strict(erp_number):
-                            logger.info("Cliente seleccionado con método directo de teclas")
-                            client_selected = True
-                        # Si no, intentar con el método de dropdown
-                        elif hasattr(self.browser, '_interact_with_dropdown'):
-                            if self.browser._interact_with_dropdown(customer_field, erp_number):
-                                logger.info("Cliente seleccionado con método específico para dropdown")
-                                client_selected = True
-                except Exception as e:
-                    logger.debug(f"Error al intentar método alternativo de dropdown: {e}")
+                    # Usar el método de extracción mejorado
+                    extracted_issues = self.browser.extract_all_issues()
                     
-                if not client_selected:
-                    logger.warning("No se pudo seleccionar cliente automáticamente")
-                    # Mostrar mensaje al usuario
+                    # Verificar si se extrajeron issues
+                    if not extracted_issues or len(extracted_issues) == 0:
+                        logger.warning("No se encontraron issues para extraer")
+                        if self.root:
+                            self.root.after(0, lambda: messagebox.showwarning(
+                                "Extracción Incompleta", 
+                                "No se encontraron issues para extraer. Verifique la página y los filtros."
+                            ))
+                        self.processing = False
+                        return
+                    
+                    # Actualizar la interfaz para mostrar progreso
                     if self.root:
-                        self.root.after(0, lambda: messagebox.showwarning(
-                            "Selección Manual Requerida", 
-                            "No se pudo seleccionar el cliente automáticamente.\n\n"
-                            "Por favor, seleccione manualmente el cliente."
+                        self.root.after(0, lambda: self.status_var.set(f"Extrayendo {len(extracted_issues)} issues..."))
+                    
+                    # Guardar en Excel
+                    success, new_items, updated_items = self.update_excel(extracted_issues)
+                    
+                    # Mostrar resultado en el hilo principal
+                    if self.root:
+                        if success:
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "Extracción Completada", 
+                                f"Se han extraído {len(extracted_issues)} issues.\n"
+                                f"Nuevos: {new_items}, Actualizados: {updated_items}"
+                            ))
+                        else:
+                            self.root.after(0, lambda: messagebox.showerror(
+                                "Error de Extracción", 
+                                "No se pudo actualizar el archivo Excel. Verifique que no esté abierto en otra aplicación."
+                            ))
+                    
+                except Exception as e:
+                    logger.error(f"Error en extracción: {e}")
+                    if self.root:
+                        self.root.after(0, lambda: messagebox.showerror(
+                            "Error Crítico", 
+                            f"Ocurrió un error durante la extracción:\n{e}"
                         ))
-                        # Esperar confirmación del usuario
-                        result = messagebox.askokcancel("Confirmación", "¿Ha seleccionado el cliente?")
-                        if not result:
-                            return False
-                        client_selected = True  # El usuario confirmó que seleccionó manualmente
-                        time.sleep(3)  # Dar tiempo para que se procese la selección
-            else:
-                logger.info(f"Cliente {erp_number} seleccionado con éxito")
-                client_selected = True
+                finally:
+                    # Restablecer estado de procesamiento
+                    self.processing = False
+                    if hasattr(self, 'status_var') and self.status_var and self.root:
+                        self.root.after(0, lambda: self.status_var.set("Extracción finalizada"))
             
-            # Actualizar la interfaz
-            if hasattr(self, 'status_var'):
-                self.status_var.set("Seleccionando proyecto automáticamente...")
-                if self.root:
-                    self.root.update()
-            
-            # 2. Implementar reintentos para la selección de proyecto
-            logger.info("Esperando a que cargue la lista de proyectos...")
-            time.sleep(5)  # Espera inicial más larga
-
-            max_attempts = 3
-            project_selected = False
-
-            for attempt in range(max_attempts):
-                logger.info(f"Intento {attempt+1}/{max_attempts} de selección de proyecto")
-                
-                if self.browser.select_project_automatically(project_id):
-                    logger.info(f"Proyecto {project_id} seleccionado con éxito en el intento {attempt+1}")
-                    project_selected = True
-                    break
-                else:
-                    logger.warning(f"Intento {attempt+1} fallido, esperando antes de reintentar...")
-                    time.sleep(3)  # Esperar entre reintentos
-
-            if not project_selected:
-                logger.warning("No se pudo seleccionar proyecto automáticamente después de varios intentos")
-                # Mostrar mensaje al usuario
-                if self.root:
-                    self.root.after(0, lambda: messagebox.showwarning(
-                        "Selección Manual Requerida", 
-                        "No se pudo seleccionar el proyecto automáticamente.\n\n"
-                        "Por favor, seleccione manualmente el proyecto."
-                    ))
-                    result = messagebox.askokcancel("Confirmación", "¿Ha seleccionado el proyecto?")
-                    if not result:
-                        return False
-                    time.sleep(3)  # Dar tiempo para selección manual
-            
-            # 3. Hacer clic en el botón de búsqueda
-            if hasattr(self, 'status_var'):
-                self.status_var.set("Realizando búsqueda...")
-                if self.root:
-                    self.root.update()
-            
-            time.sleep(1)
-            self.browser.click_search_button()
-            
-            # 4. Continuar con la extracción
-            logger.info("Iniciando proceso de extracción")
-            if hasattr(self, 'status_var'):
-                self.status_var.set("Extrayendo datos...")
-                if self.root:
-                    self.root.update()
-            
-            self.perform_extraction()
+            # Iniciar el hilo de extracción
+            threading.Thread(target=extraction_thread, daemon=True).start()
             
         except Exception as e:
-            logger.error(f"Error al rellenar campos y extraer: {e}")
-            if hasattr(self, 'status_var'):
-                self.status_var.set(f"Error: {e}")
-            
+            logger.error(f"Error al iniciar extracción: {e}")
             if self.root:
-                self.root.after(0, lambda: messagebox.showerror(
-                    "Error", 
-                    f"Error al rellenar campos: {e}"
-                ))
-                
-
-
-
-
-
-
-
-
-
-
-    def select_client(self, client_string):
+                messagebox.showerror("Error", f"Error al iniciar extracción: {e}")
+            self.processing = False
+    
+    def setup_gui_logger(self):
         """
-        Maneja la selección de un cliente desde el combobox
+        Configura el logger para que también escriba en la GUI
         
-        Args:
-            client_string (str): String en formato "1025541 - Nombre del cliente"
+        Crea un handler personalizado que redirige los mensajes de log
+        al widget Text de la interfaz gráfica.
+        """
+        class TextHandler(logging.Handler):
+            def __init__(self, text_widget):
+                logging.Handler.__init__(self)
+                self.text_widget = text_widget
+            
+            def emit(self, record):
+                msg = self.format(record)
+                def append():
+                    self.text_widget.configure(state='normal')
+                    
+                    # Agregar marca de tiempo y nivel con color
+                    time_str = msg.split(' - ')[0] + ' - '
+                    level_str = record.levelname + ' - '
+                    msg_content = msg.split(' - ', 2)[2] if len(msg.split(' - ')) > 2 else ""
+                    
+                    self.text_widget.insert(tk.END, time_str, "INFO")
+                    self.text_widget.insert(tk.END, level_str, record.levelname)
+                    self.text_widget.insert(tk.END, msg_content + '\n', record.levelname)
+                    
+                    self.text_widget.configure(state='disabled')
+                    self.text_widget.yview(tk.END)
+                    
+                    # Limitar tamaño del log
+                    self.limit_log_length()
+                    
+                # Llamar a append desde el hilo principal
+                self.text_widget.after(0, append)
+                
+            def limit_log_length(self):
+                """Limita la longitud del log para evitar consumo excesivo de memoria"""
+                if float(self.text_widget.index('end-1c').split('.')[0]) > 1000:
+                    self.text_widget.configure(state='normal')
+                    self.text_widget.delete('1.0', '500.0')
+                    self.text_widget.configure(state='disabled')
+        
+        # Solo configurar si hay un widget de texto disponible
+        if hasattr(self, 'log_text') and self.log_text:
+            # Crear handler para el widget Text
+            text_handler = TextHandler(self.log_text)
+            text_handler.setLevel(logging.INFO)
+            text_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            
+            # Añadir el handler al logger
+            logger.addHandler(text_handler)
+            
+            # Deshabilitar el widget
+            self.log_text.configure(state='disabled')
+            
+    def exit_app(self):
+        """
+        Cierra la aplicación de forma controlada
+        
+        Solicita confirmación si hay un proceso en curso, cierra el navegador
+        si el usuario lo desea, y guarda la configuración antes de salir.
         """
         try:
-            if not client_string or len(client_string) < 3:
-                return
+            # Verificar si hay un proceso en curso
+            if self.processing:
+                confirm_exit = messagebox.askyesno(
+                    "Proceso en curso", 
+                    "Hay un proceso de extracción en curso. ¿Realmente desea salir?",
+                    icon='warning'
+                )
+                if not confirm_exit:
+                    return
                     
-            # Extraer el ERP number del string "1025541 - Nombre del cliente"
-            parts = client_string.split(" - ")
-            erp_number = parts[0].strip()
+            if self.driver:
+                try:
+                    close_browser = messagebox.askyesno(
+                        "Cerrar navegador", 
+                        "¿Desea cerrar también el navegador?",
+                        icon='question'
+                    )
+                    if close_browser:
+                        self.browser.close()
+                        logger.info("Navegador cerrado correctamente")
+                except:
+                    logger.warning("No se pudo cerrar el navegador correctamente")
             
-            # Establecer el valor en el Entry
-            self.client_var.set(client_string)
-            logger.info(f"Cliente seleccionado: {client_string}")
-            
-            # Actualizar inmediatamente la interfaz para confirmar el cambio
-            if self.root:
-                self.root.update_idletasks()
-            
-            # Actualizar la lista de proyectos para este cliente
-            projects = self.db_manager.get_projects(erp_number)
-            self.project_combo['values'] = projects
-            
-            # Ajustar el ancho del dropdown para los proyectos
-            from ui.main_window import adjust_combobox_dropdown_width
-            adjust_combobox_dropdown_width(self.project_combo)
-            
-            # Si hay proyectos disponibles, seleccionar el primero
-            if projects:
-                self.project_combo.current(0)
-                self.select_project(projects[0])
-                        
-            # Actualizar el uso de este cliente
-            self.db_manager.update_client_usage(erp_number)
+            # Guardar configuración antes de salir
             self.save_config()
-        except Exception as e:
-            logger.error(f"Error al seleccionar cliente: {e}")
-        
-        
-        
-        
-        
-        
-                    
-    def select_project(self, project_string):
-        """
-        Maneja la selección de un proyecto desde el combobox
-        
-        Args:
-            project_string (str): String en formato "20096444 - Nombre del proyecto"
-        """
-        try:
-            if not project_string or len(project_string) < 3:
-                return
-                    
-            # Extraer el ID del proyecto del string "20096444 - Nombre del proyecto"
-            parts = project_string.split(" - ")
-            project_id = parts[0].strip()
             
-            # Establecer el valor en el Entry - AQUÍ ESTÁ EL CAMBIO
-            # En lugar de solo establecer el ID, mantener todo el string con nombre
-            self.project_var.set(project_string)
-            logger.info(f"Proyecto seleccionado: {project_string}")
-            
-            # Actualizar inmediatamente la interfaz para confirmar el cambio
             if self.root:
-                self.root.update_idletasks()
-            
-            # Actualizar el uso de este proyecto
-            self.db_manager.update_project_usage(project_id)
-            self.save_config()
+                self.root.destroy()
         except Exception as e:
-            logger.error(f"Error al seleccionar proyecto: {e}")
+            logger.error(f"Error al cerrar la aplicación: {e}")
+            # En caso de error, forzar cierre
+            if self.root:
+                self.root.destroy()
 
-                    
-            
-            
-                        
-            
-            
-            
-            
-            
-            
-            
+
+
+
+
+
+
+
+
+
 
     def add_new_client(self):
         """
@@ -1133,6 +1077,16 @@ class IssuesExtractor:
             logger.error(f"Error al añadir nuevo cliente: {e}")
             if hasattr(self, 'root') and self.root:
                 messagebox.showerror("Error", f"No se pudo añadir el cliente: {e}")
+
+
+
+
+
+
+
+
+
+
 
     def add_new_project(self):
         """
@@ -1262,13 +1216,178 @@ class IssuesExtractor:
         except Exception as e:
             logger.error(f"Error al añadir nuevo proyecto: {e}")
             if hasattr(self, 'root') and self.root:
-                messagebox.showerror("Error", f"No se pudo añadir el proyecto: {e}")            
+                messagebox.showerror("Error", f"No se pudo añadir el proyecto: {e}")
+
+
+
+
+
+
+
+
+
+
+
+    def select_client(self, client_string):
+        """
+        Maneja la selección de un cliente desde el combobox
+        
+        Args:
+            client_string (str): String en formato "1025541 - Nombre del cliente"
+        """
+        try:
+            if not client_string or len(client_string) < 3:
+                return
+                    
+            # Extraer el ERP number del string "1025541 - Nombre del cliente"
+            parts = client_string.split(" - ")
+            erp_number = parts[0].strip()
             
+            # Establecer el valor en el Entry
+            self.client_var.set(client_string)
+            logger.info(f"Cliente seleccionado: {client_string}")
             
+            # Actualizar inmediatamente la interfaz para confirmar el cambio
+            if self.root:
+                self.root.update_idletasks()
             
+            # Actualizar la lista de proyectos para este cliente
+            projects = self.db_manager.get_projects(erp_number)
+            self.project_combo['values'] = projects
             
+            # Ajustar el ancho del dropdown para los proyectos
+            from ui.main_window import adjust_combobox_dropdown_width
+            adjust_combobox_dropdown_width(self.project_combo)
             
+            # Si hay proyectos disponibles, seleccionar el primero
+            if projects:
+                self.project_combo.current(0)
+                self.select_project(projects[0])
+                        
+            # Actualizar el uso de este cliente
+            self.db_manager.update_client_usage(erp_number)
+            self.save_config()
+        except Exception as e:
+            logger.error(f"Error al seleccionar cliente: {e}")
+
+
+
+
+
+
+
+
+
+    def select_project(self, project_string):
+        """
+        Maneja la selección de un proyecto desde el combobox
+        
+        Args:
+            project_string (str): String en formato "20096444 - Nombre del proyecto"
+        """
+        try:
+            if not project_string or len(project_string) < 3:
+                return
+                    
+            # Extraer el ID del proyecto del string "20096444 - Nombre del proyecto"
+            parts = project_string.split(" - ")
+            project_id = parts[0].strip()
             
+            # Establecer el valor en el Entry - AQUÍ ESTÁ EL CAMBIO
+            # En lugar de solo establecer el ID, mantener todo el string con nombre
+            self.project_var.set(project_string)
+            logger.info(f"Proyecto seleccionado: {project_string}")
+            
+            # Actualizar inmediatamente la interfaz para confirmar el cambio
+            if self.root:
+                self.root.update_idletasks()
+            
+            # Actualizar el uso de este proyecto
+            self.db_manager.update_project_usage(project_id)
+            self.save_config()
+        except Exception as e:
+            logger.error(f"Error al seleccionar proyecto: {e}")
+
+
+
+
+
+
+
+
+
+
+
+    def _replace_standard_messageboxes(self):
+        """
+        Reemplaza los messagebox estándar por nuestros diálogos personalizados
+        con mejor formato y alineación de texto.
+        
+        Este método modifica el comportamiento de messagebox para usar nuestros
+        diálogos personalizados que manejan mejor la alineación del texto.
+        """
+        try:
+            # Intentar importar los diálogos personalizados
+            from ui.custom_dialogs import (
+                show_info, show_warning, show_error, show_question
+            )
+            
+            # Guardar referencia a funciones originales
+            self._original_showinfo = messagebox.showinfo
+            self._original_showwarning = messagebox.showwarning
+            self._original_showerror = messagebox.showerror
+            self._original_askokcancel = messagebox.askokcancel
+            
+            # Reemplazar con las versiones mejoradas pero preservando la interfaz original
+            def custom_showinfo(title, message, **kwargs):
+                if self.root:
+                    return show_info(self.root, title, message)
+                else:
+                    return self._original_showinfo(title, message, **kwargs)
+                    
+            def custom_showwarning(title, message, **kwargs):
+                if self.root:
+                    return show_warning(self.root, title, message)
+                else:
+                    return self._original_showwarning(title, message, **kwargs)
+                    
+            def custom_showerror(title, message, **kwargs):
+                if self.root:
+                    return show_error(self.root, title, message)
+                else:
+                    return self._original_showerror(title, message, **kwargs)
+                    
+            def custom_askokcancel(title, message, **kwargs):
+                # Para diálogos que requieren respuesta, todavía usamos los originales
+                # ya que nuestros personalizados no tienen esa funcionalidad aún
+                return self._original_askokcancel(title, message, **kwargs)
+            
+            # Aplicar los reemplazos a nivel global
+            messagebox.showinfo = custom_showinfo
+            messagebox.showwarning = custom_showwarning
+            messagebox.showerror = custom_showerror
+            # No reemplazamos askokcancel ya que necesitamos su funcionalidad de respuesta
+            
+            return True
+            
+        except ImportError:
+            logger.debug("Diálogos personalizados no disponibles, usando messagebox estándar")
+            return False
+        except Exception as e:
+            logger.error(f"Error al reemplazar messageboxes: {e}")
+            return False
+
+
+
+
+
+
+
+
+
+
+
+
     def start_browser(self):
         """
         Inicia el navegador desde la interfaz gráfica
@@ -1300,40 +1419,6 @@ class IssuesExtractor:
             self.status_var.set(f"Error: {e}")
             messagebox.showerror("Error", f"Error al iniciar el navegador: {e}")
 
-            # NUEVO CÓDIGO: Iniciar extracción de datos automáticamente
-            logger.info("Comenzando extracción de datos a Excel...")
-
-            # Actualizar la interfaz
-            if self.root:
-                self.root.after(0, lambda: self.status_var.set("Iniciando extracción de datos..."))
-
-            # Usar el método perform_extraction existente para extraer los datos
-            try:
-                extraction_success = self.perform_extraction()
-                
-                if extraction_success:
-                    logger.info("✅ Extracción de datos completada con éxito")
-                    if self.root:
-                        self.root.after(0, lambda: self.status_var.set("Extracción completada. Los datos han sido guardados en Excel."))
-                else:
-                    logger.warning("⚠️ La extracción de datos no fue exitosa")
-                    if self.root:
-                        self.root.after(0, lambda: self.status_var.set("Error: La extracción de datos no fue exitosa"))
-                        self.root.after(0, lambda: messagebox.showwarning(
-                            "Extracción incompleta",
-                            "La extracción de datos no se completó correctamente.\n\n"
-                            "Verifique el log para más detalles."
-                        ))
-            except Exception as e:
-                logger.error(f"Error durante la extracción de datos: {e}")
-                if self.root:
-                    self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
-                    self.root.after(0, lambda: messagebox.showerror(
-                        "Error de Extracción", 
-                        f"Se produjo un error durante la extracción de datos:\n\n{e}"
-                    ))
-
-
 
 
 
@@ -1347,8 +1432,6 @@ class IssuesExtractor:
         Método para ejecutar la inicialización del navegador en un hilo separado
         
         Realiza la conexión con el navegador y navega a la URL inicial de SAP.
-        Mantiene el flujo original para hacer clic en el botón de ajustes y
-        añade pasos adicionales para completar la secuencia de navegación.
         """
         try:
             if self.connect_to_browser():
@@ -1374,141 +1457,46 @@ class IssuesExtractor:
                 if self.root:
                     self.root.after(0, lambda: self.status_var.set("Configurando columnas visibles..."))
                 
-                # 1. Hacer clic en el botón de ajustes - MANTENER COMPORTAMIENTO ORIGINAL
-                if self.browser.click_settings_button():
+                # 1. Hacer clic en el botón de ajustes usando el método mejorado
+                if self.browser.enhanced_click_settings_button():
                     logger.info("✅ Botón de ajustes pulsado correctamente")
                     
                     # Esperar a que se abra el panel de ajustes
-                    time.sleep(1)
+                    time.sleep(1) #Modificado de 2 a 1 segundo
                     
-                    # 2. Continuar con la secuencia de navegación por teclado desde aquí
-                    # En lugar de usar select_all_visible_columns, usar una secuencia de teclas
-                    # para completar los pasos 5-11
-                    
-                    # Importar las clases necesarias
-                    from selenium.webdriver.common.action_chains import ActionChains
-                    from selenium.webdriver.common.keys import Keys
-                    
-                    try:
-                        # PASO 5-7: 3 tabs, 2 flechas derecha, Enter para Select Columns
-                        logger.info("Continuando con pasos 5-7: Navegando a 'Select Columns'...")
-                        actions = ActionChains(self.browser.driver)
+                    # 2. Usar el nuevo método de secuencia exacta de teclas
+                    if self.browser.perform_exact_keyboard_sequence():
+                        logger.info("✅ Columnas configuradas correctamente mediante secuencia exacta de teclas")
                         
-                        # 3 tabs
-                        for i in range(5):
-                            actions.send_keys(Keys.TAB)
-                            actions.pause(0.3)
+                        # Esperar a que se recargue la tabla con las nuevas columnas
+                        time.sleep(1) #Modificado de 3 a 1 segundo
+                    else:
+                        logger.warning("⚠️ No se pudieron configurar todas las columnas")
                         
-                        # 2 flechas derecha
-                        for i in range(2):
-                            actions.send_keys(Keys.ARROW_RIGHT)
-                            actions.pause(0.3)
-                        
-                        # Enter para Select Columns
-                        actions.send_keys(Keys.ENTER)
-                        actions.perform()
-                        logger.info("✅ Pasos 5-7: Navegación a 'Select Columns' completada")
-                        
-                        # Esperar a que se abra el panel de columnas
-                        time.sleep(2)
-                        
-                        # PASO 8-9: 3 tabs y Enter para Select All
-                        logger.info("Ejecutando pasos 8-9: Seleccionando 'Select All'...")
-                        actions = ActionChains(self.browser.driver)
-                        
-                        # 3 tabs
-                        for i in range(3):
-                            actions.send_keys(Keys.TAB)
-                            actions.pause(0.3)
-                        
-                        # Enter para Select All
-                        actions.send_keys(Keys.ENTER)
-                        actions.perform()
-                        logger.info("✅ Pasos 8-9: 'Select All' marcado correctamente")
-                        
-                        # Esperar a que se procese la selección
-                        time.sleep(1.5)
-                        
-                        # PASO 10-11: 2 tabs y Enter para OK
-                        logger.info("Ejecutando pasos 10-11: Confirmando con OK...")
-                        actions = ActionChains(self.browser.driver)
-                        
-                        # 2 tabs
-                        for i in range(2):
-                            actions.send_keys(Keys.TAB)
-                            actions.pause(0.3)
-                        
-                        # Enter para OK
-                        actions.send_keys(Keys.ENTER)
-                        actions.perform()
-                        logger.info("✅ Pasos 10-11: Confirmación con OK completada")
-                        
-                        # Esperar a que se cierre el panel y se apliquen los cambios
-                        time.sleep(3)
-                        
-                        logger.info("✅ Configuración de columnas completada exitosamente")
-                        
-                    except Exception as keyboard_e:
-                        logger.warning(f"Error al ejecutar secuencia de teclado: {keyboard_e}")
-                        
-                        # Si falla la secuencia de teclado, intentar con select_all_visible_columns
-                        logger.info("Intentando método alternativo...")
-                        if self.browser.select_all_visible_columns():
-                            logger.info("✅ Columnas configuradas correctamente con método alternativo")
-                            
-                            # Esperar a que se recargue la tabla con las nuevas columnas
-                            time.sleep(3)
-                        else:
-                            logger.warning("⚠️ No se pudieron configurar todas las columnas")
-                            
-                            # Informar al usuario en el hilo principal
-                            if self.root:
-                                self.root.after(0, lambda: messagebox.showinfo(
-                                    "Configuración manual",
-                                    "No se pudieron configurar todas las columnas automáticamente.\n\n"
-                                    "Por favor, realice estos pasos manualmente:\n"
-                                    "1. Pulse Tab 3 veces\n" 
-                                    "2. Pulse flecha derecha 2 veces\n"
-                                    "3. Pulse Enter (para columnas)\n"
-                                    "4. Pulse Tab 3 veces\n"
-                                    "5. Pulse Enter (para Select All)\n"
-                                    "6. Pulse Tab 2 veces\n"
-                                    "7. Pulse Enter (para OK)"
-                                ))
+                        # Informar al usuario en el hilo principal
+                        if self.root:
+                            self.root.after(0, lambda: messagebox.showinfo(
+                                "Configuración manual",
+                                "No se pudieron configurar todas las columnas automáticamente.\n\n"
+                                "Por favor, realice estos pasos manualmente:\n"
+                                "1. 5 tabs\n"
+                                "2. 2 flechas a la derecha\n"
+                                "3. Enter (para Select Columns)\n"
+                                "4. 3 tabs\n"
+                                "5. Enter (para Select All)\n"
+                                "6. 2 tabs\n"
+                                "7. Enter (para OK)"
+                            ))
                 else:
                     logger.warning("⚠️ No se pudo hacer clic en el botón de ajustes")
                     
-                    # Intentar enfoque alternativo completo con navegación por teclado si existe
-                    if hasattr(self.browser, 'navigate_keyboard_sequence'):
-                        logger.info("Intentando navegación completa por teclado como alternativa...")
-                        if self.browser.navigate_keyboard_sequence():
-                            logger.info("✅ Navegación por teclado completada correctamente")
-                        else:
-                            # Informar al usuario en el hilo principal
-                            if self.root:
-                                self.root.after(0, lambda: messagebox.showwarning(
-                                    "Acción Manual Requerida",
-                                    "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
-                                    "Por favor, realice estos pasos manualmente:\n"
-                                    "1. Haga clic en el título 'Issues and Actions Overview'\n"
-                                    "2. Pulse Tab 18 veces\n"
-                                    "3. Pulse Enter (para ajustes)\n"
-                                    "4. Pulse Tab 3 veces\n" 
-                                    "5. Pulse flecha derecha 2 veces\n"
-                                    "6. Pulse Enter (para columnas)\n"
-                                    "7. Pulse Tab 3 veces\n"
-                                    "8. Pulse Enter (para Select All)\n"
-                                    "9. Pulse Tab 2 veces\n"
-                                    "10. Pulse Enter (para OK)"
-                                ))
-                    else:
-                        # Informar al usuario en el hilo principal (mensaje original)
-                        if self.root:
-                            self.root.after(0, lambda: messagebox.showwarning(
-                                "Acción Manual Requerida",
-                                "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
-                                "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha."
-                            ))
+                    # Informar al usuario en el hilo principal
+                    if self.root:
+                        self.root.after(0, lambda: messagebox.showwarning(
+                            "Acción Manual Requerida",
+                            "No se pudo hacer clic en el botón de ajustes automáticamente.\n\n"
+                            "Por favor, haga clic manualmente en el botón de ajustes (engranaje) ubicado en la esquina inferior derecha."
+                        ))
                 
                 # Mostrar instrucciones en el hilo principal
                 if self.root:
@@ -1523,10 +1511,6 @@ class IssuesExtractor:
             if self.root:
                 self.root.after(0, lambda: self.status_var.set(f"Error: {e}"))
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Error al iniciar el navegador: {e}"))
-
-
-
-
 
 
 
@@ -1598,321 +1582,10 @@ class IssuesExtractor:
     3. Cuando quieras comenzar, haz clic en 'Iniciar Extracción'
             """
             
-            messagebox.showinfo("Instrucciones de Extracción", instructions)    
+            messagebox.showinfo("Instrucciones de Extracción", instructions)
 
 
 
-
-
-
-
-
-    def start_extraction(self):
-        """
-        Inicia el proceso de extracción de issues con método dinámico mejorado.
-        """
-        try:
-            # Verificar si hay un proceso en curso
-            if self.processing:
-                messagebox.showwarning("Proceso en curso", "Hay un proceso de extracción en curso.")
-                return
-                
-            # Verificar que existe un archivo Excel seleccionado
-            if not self.excel_file_path:
-                messagebox.showwarning("Archivo Excel no seleccionado", "Debe seleccionar o crear un archivo Excel primero.")
-                return
-                    
-            # Verificar que el navegador está abierto
-            if not self.driver:
-                messagebox.showwarning("Navegador no iniciado", "Debe iniciar el navegador primero.")
-                return
-            
-            # Marcar como procesando
-            self.processing = True
-            
-            # Actualizar la interfaz
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Iniciando extracción dinámica de issues...")
-                if self.root:
-                    self.root.update()
-            
-            # Ejecutar la extracción en un hilo separado para no bloquear la GUI
-            def extraction_thread():
-                try:
-                    # Usar el método de extracción sin argumentos
-                    extracted_issues = self.browser.extract_all_issues()
-                    
-                    # Verificar si se extrajeron issues
-                    if not extracted_issues or len(extracted_issues) == 0:
-                        logger.warning("No se encontraron issues para extraer")
-                        if self.root:
-                            self.root.after(0, lambda: messagebox.showwarning(
-                                "Extracción Incompleta", 
-                                "No se encontraron issues para extraer. Verifique la página y los filtros."
-                            ))
-                        self.processing = False
-                        return
-                    
-                    # Actualizar la interfaz para mostrar progreso
-                    if self.root:
-                        self.root.after(0, lambda: self.status_var.set(f"Extrayendo {len(extracted_issues)} issues..."))
-                    
-                    # Guardar en Excel
-                    success, new_items, updated_items = self.update_excel(extracted_issues)
-                    
-                    # Mostrar resultado en el hilo principal
-                    if self.root:
-                        if success:
-                            self.root.after(0, lambda: messagebox.showinfo(
-                                "Extracción Completada", 
-                                f"Se han extraído {len(extracted_issues)} issues.\n"
-                                f"Nuevos: {new_items}, Actualizados: {updated_items}"
-                            ))
-                        else:
-                            self.root.after(0, lambda: messagebox.showerror(
-                                "Error de Extracción", 
-                                "No se pudo actualizar el archivo Excel. Verifique que no esté abierto en otra aplicación."
-                            ))
-                    
-                except Exception as e:
-                    logger.error(f"Error en extracción dinámica: {e}")
-                    if self.root:
-                        self.root.after(0, lambda: messagebox.showerror(
-                            "Error Crítico", 
-                            f"Ocurrió un error durante la extracción:\n{e}"
-                        ))
-                finally:
-                    # Restablecer estado de procesamiento
-                    self.processing = False
-                    if hasattr(self, 'status_var') and self.status_var and self.root:
-                        self.root.after(0, lambda: self.status_var.set("Extracción finalizada"))
-            
-            # Iniciar el hilo de extracción
-            threading.Thread(target=extraction_thread, daemon=True).start()
-            
-        except Exception as e:
-            logger.error(f"Error al iniciar extracción: {e}")
-            if self.root:
-                messagebox.showerror("Error", f"Error al iniciar extracción: {e}")
-            self.processing = False        
-        
-        
-        
-        
-        
-        
-        
-    def _try_vba_extraction(self, url, target_file):
-        """
-        Intenta realizar la extracción utilizando el método VBA automatizado.
-        
-        Args:
-            url (str): URL de la página SAP de la que extraer datos
-            target_file (str): Ruta del archivo Excel destino
-            
-        Returns:
-            bool: True si la extracción fue exitosa, False si falló
-        """
-        try:
-            # Mostrar mensaje de progreso
-            if hasattr(self, 'status_var') and self.status_var:
-                self.status_var.set("Ejecutando extracción optimizada...")
-                if self.root:
-                    self.root.update()
-                    
-            # Intentar importar e inicializar el extractor VBA mejorado
-            try:
-                from tools.enhanced_vba_extractor import EnhancedVBAExtractor
-                vba_extractor = EnhancedVBAExtractor(self.driver)
-            except ImportError:
-                logger.warning("No se pudo importar EnhancedVBAExtractor, probablemente xlwings no está disponible")
-                return False
-            
-            # Ejecutar la extracción VBA
-            success, result, message = vba_extractor.extract_data(url, target_file)
-            
-            if success:
-                # Extraer información de filas extraídas
-                rows_extracted = result.get('rows_extracted', 0) if result else 0
-                file_path = result.get('destination_file', target_file) if result else target_file
-                
-                # Actualizar la interfaz con el resultado exitoso
-                if hasattr(self, 'root') and self.root:
-                    self.root.after(0, lambda: self.status_var.set(
-                        f"Extracción completada. Se extrajeron {rows_extracted} issues."
-                    ))
-                    
-                    self.root.after(0, lambda: messagebox.showinfo(
-                        "Extracción Exitosa", 
-                        f"La extracción se ha completado correctamente.\n\n"
-                        f"Se extrajeron {rows_extracted} issues.\n"
-                        f"Los datos han sido guardados en: {file_path}"
-                    ))
-                    
-                return True
-            else:
-                # Registrar el error pero no mostrar mensaje (el método alternativo se encargará)
-                logger.warning(f"Extracción VBA falló: {message}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error en extracción VBA: {e}")
-            return False
-
-
-
-
-
-
-    def _original_extraction(self):
-        """
-        Método que conserva la lógica original de extracción
-        para poder volver a ella si es necesario.
-        """
-        # Inicio del método original
-        erp_number = self.client_var.get()
-        project_id = self.project_var.get()
-        
-        # Iniciar extracción en un hilo separado para no bloquear la GUI
-        threading.Thread(
-            target=self._fill_fields_and_extract, 
-            args=(erp_number, project_id),
-            daemon=True
-        ).start()
-
-
-
-
-
-
-
-    
-    def setup_gui_logger(self):
-        """
-        Configura el logger para que también escriba en la GUI
-        
-        Crea un handler personalizado que redirige los mensajes de log
-        al widget Text de la interfaz gráfica.
-        """
-        class TextHandler(logging.Handler):
-            def __init__(self, text_widget):
-                logging.Handler.__init__(self)
-                self.text_widget = text_widget
-            
-            def emit(self, record):
-                msg = self.format(record)
-                def append():
-                    self.text_widget.configure(state='normal')
-                    
-                    # Agregar marca de tiempo y nivel con color
-                    time_str = msg.split(' - ')[0] + ' - '
-                    level_str = record.levelname + ' - '
-                    msg_content = msg.split(' - ', 2)[2] if len(msg.split(' - ')) > 2 else ""
-                    
-                    self.text_widget.insert(tk.END, time_str, "INFO")
-                    self.text_widget.insert(tk.END, level_str, record.levelname)
-                    self.text_widget.insert(tk.END, msg_content + '\n', record.levelname)
-                    
-                    self.text_widget.configure(state='disabled')
-                    self.text_widget.yview(tk.END)
-                    
-                    # Limitar tamaño del log
-                    self.limit_log_length()
-                    
-                # Llamar a append desde el hilo principal
-                self.text_widget.after(0, append)
-                
-            def limit_log_length(self):
-                """Limita la longitud del log para evitar consumo excesivo de memoria"""
-                if float(self.text_widget.index('end-1c').split('.')[0]) > 1000:
-                    self.text_widget.configure(state='normal')
-                    self.text_widget.delete('1.0', '500.0')
-                    self.text_widget.configure(state='disabled')
-        
-        # Solo configurar si hay un widget de texto disponible
-        if hasattr(self, 'log_text') and self.log_text:
-            # Crear handler para el widget Text
-            text_handler = TextHandler(self.log_text)
-            text_handler.setLevel(logging.INFO)
-            text_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-            
-            # Añadir el handler al logger
-            logger.addHandler(text_handler)
-            
-            # Deshabilitar el widget
-            self.log_text.configure(state='disabled')
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-    def _replace_standard_messageboxes(self):
-        """
-        Reemplaza los messagebox estándar por nuestros diálogos personalizados
-        con mejor formato y alineación de texto.
-        
-        Este método modifica el comportamiento de messagebox para usar nuestros
-        diálogos personalizados que manejan mejor la alineación del texto.
-        """
-        try:
-            # Intentar importar los diálogos personalizados
-            from ui.custom_dialogs import (
-                show_info, show_warning, show_error, show_question
-            )
-            
-            # Guardar referencia a funciones originales
-            self._original_showinfo = messagebox.showinfo
-            self._original_showwarning = messagebox.showwarning
-            self._original_showerror = messagebox.showerror
-            self._original_askokcancel = messagebox.askokcancel
-            
-            # Reemplazar con las versiones mejoradas pero preservando la interfaz original
-            def custom_showinfo(title, message, **kwargs):
-                if self.root:
-                    return show_info(self.root, title, message)
-                else:
-                    return self._original_showinfo(title, message, **kwargs)
-                    
-            def custom_showwarning(title, message, **kwargs):
-                if self.root:
-                    return show_warning(self.root, title, message)
-                else:
-                    return self._original_showwarning(title, message, **kwargs)
-                    
-            def custom_showerror(title, message, **kwargs):
-                if self.root:
-                    return show_error(self.root, title, message)
-                else:
-                    return self._original_showerror(title, message, **kwargs)
-                    
-            def custom_askokcancel(title, message, **kwargs):
-                # Para diálogos que requieren respuesta, todavía usamos los originales
-                # ya que nuestros personalizados no tienen esa funcionalidad aún
-                return self._original_askokcancel(title, message, **kwargs)
-            
-            # Aplicar los reemplazos a nivel global
-            messagebox.showinfo = custom_showinfo
-            messagebox.showwarning = custom_showwarning
-            messagebox.showerror = custom_showerror
-            # No reemplazamos askokcancel ya que necesitamos su funcionalidad de respuesta
-            
-            return True
-            
-        except ImportError:
-            logger.debug("Diálogos personalizados no disponibles, usando messagebox estándar")
-            return False
-        except Exception as e:
-            logger.error(f"Error al reemplazar messageboxes: {e}")
-            return False
-    
-        
-            
     def load_config(self):
         """
         Carga la configuración guardada desde un archivo JSON
@@ -1969,7 +1642,10 @@ class IssuesExtractor:
                     logger.info("Configuración cargada correctamente")
         except Exception as e:
             logger.error(f"Error al cargar configuración: {e}")
-            
+
+
+
+
     def save_config(self):
         """
         Guarda la configuración actual en un archivo JSON
@@ -2002,60 +1678,12 @@ class IssuesExtractor:
                     
             logger.debug("Configuración guardada correctamente")
         except Exception as e:
-            logger.error(f"Error al guardar configuración: {e}")            
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    def exit_app(self):
-        """
-        Cierra la aplicación de forma controlada
-        
-        Solicita confirmación si hay un proceso en curso, cierra el navegador
-        si el usuario lo desea, y guarda la configuración antes de salir.
-        """
-        try:
-            # Verificar si hay un proceso en curso
-            if self.processing:
-                confirm_exit = messagebox.askyesno(
-                    "Proceso en curso", 
-                    "Hay un proceso de extracción en curso. ¿Realmente desea salir?",
-                    icon='warning'
-                )
-                if not confirm_exit:
-                    return
-                    
-            if self.driver:
-                try:
-                    close_browser = messagebox.askyesno(
-                        "Cerrar navegador", 
-                        "¿Desea cerrar también el navegador?",
-                        icon='question'
-                    )
-                    if close_browser:
-                        self.browser.close()
-                        logger.info("Navegador cerrado correctamente")
-                except:
-                    logger.warning("No se pudo cerrar el navegador correctamente")
-            
-            # Guardar configuración antes de salir
-            self.save_config()
-            
-            if self.root:
-                self.root.destroy()
-        except Exception as e:
-            logger.error(f"Error al cerrar la aplicación: {e}")
-            # En caso de error, forzar cierre
-            if self.root:
-                self.root.destroy()
-             
-                
+            logger.error(f"Error al guardar configuración: {e}")
+
+
+
+
+
     def create_gui(self):
         """
         Crea la interfaz gráfica completa de la aplicación
@@ -2082,7 +1710,10 @@ class IssuesExtractor:
         self.load_config()
         
         # Reemplazar los messagebox estándar con nuestros diálogos personalizados
-        self._replace_standard_messageboxes()        
+        self._replace_standard_messageboxes()
+
+
+
 
 
 
@@ -2095,7 +1726,12 @@ class IssuesExtractor:
         self.create_gui()
         if self.root:
             self.root.mainloop()
-            
+
+
+
+
+
+
 # Métodos para ejecución en modo consola
 def run_console_mode():
     """
